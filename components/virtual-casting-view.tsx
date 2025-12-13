@@ -149,12 +149,15 @@ function VirtualCastingView() {
     if (!selectedCharacterId || !userId) return
 
     try {
+      // 기존 배우든 커스텀 배우든 항상 이름과 이미지를 저장
       const result = await castActor({
         character_id: selectedCharacterId,
         actor_id: actor.isCustom ? undefined : actor.id,
-        custom_actor_name: actor.isCustom ? actor.name : undefined,
-        custom_actor_image_url: actor.isCustom ? actor.image_url || undefined : undefined,
+        custom_actor_name: actor.name, // 항상 이름 저장
+        custom_actor_image_url: actor.image_url || undefined, // 항상 이미지 저장
       })
+
+      console.log("castActor result:", result) // 디버깅용
 
       if (result.success) {
         // 로컬 상태 업데이트
@@ -165,9 +168,13 @@ function VirtualCastingView() {
             actorImage: actor.image_url,
           }
         }))
+      } else {
+        console.error("castActor failed:", result.error)
+        alert(result.error || "캐스팅 저장에 실패했습니다.")
       }
     } catch (error) {
       console.error("Error casting actor:", error)
+      alert("캐스팅 중 오류가 발생했습니다.")
     }
 
     setIsActorDialogOpen(false)
