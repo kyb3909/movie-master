@@ -481,8 +481,8 @@ export async function castActor(
     return { success: false, error: "배우를 선택하거나 이름을 입력해주세요." }
   }
 
-  // Clerk JWT를 포함한 Supabase 클라이언트 사용 (RLS 통과용)
-  const supabase = await createClerkSupabaseClientSsr()
+  // Admin 클라이언트 사용 (RLS 우회 - 서버 사이드에서 userId 검증 완료)
+  const supabase = createAdminClient()
 
   // 캐릭터가 승인된 프로젝트의 것인지 확인
   const { data: character } = await supabase
