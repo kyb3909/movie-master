@@ -408,7 +408,7 @@ function VirtualCastingView() {
                             게임 시작하기
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-4xl max-h-[90vh]">
+                        <DialogContent className="max-w-7xl w-[95vw] max-h-[90vh]">
                           <DialogHeader>
                             <DialogTitle className="flex items-center gap-2 text-foreground">
                               <Film className="w-5 h-5" />
@@ -641,7 +641,7 @@ function VirtualCastingView() {
                             랭킹보기
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-4xl max-h-[90vh]">
+                        <DialogContent className="max-w-7xl w-[95vw] max-h-[90vh]">
                           <DialogHeader>
                             <DialogTitle className="flex items-center gap-2 text-foreground">
                               <Trophy className="w-5 h-5" />
