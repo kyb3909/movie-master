@@ -1,7 +1,6 @@
 "use server"
 
-import { createClient } from "@/utils/supabase/server"
-import { createAdminClient } from "@/utils/supabase/server"
+import { createClient, createClerkSupabaseClientSsr, createAdminClient } from "@/utils/supabase/server"
 import { revalidatePath } from "next/cache"
 import { auth } from "@clerk/nextjs/server"
 import type {
@@ -482,7 +481,8 @@ export async function castActor(
     return { success: false, error: "배우를 선택하거나 이름을 입력해주세요." }
   }
 
-  const supabase = await createClient()
+  // Clerk JWT를 포함한 Supabase 클라이언트 사용 (RLS 통과용)
+  const supabase = await createClerkSupabaseClientSsr()
 
   // 캐릭터가 승인된 프로젝트의 것인지 확인
   const { data: character } = await supabase
