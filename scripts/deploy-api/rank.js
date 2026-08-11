@@ -19,7 +19,7 @@ import { head, put } from "@vercel/blob"
 
 /** 랭킹을 나누는 축. 여기 없는 값은 받지 않는다 — 오타로 유령 순위표가 생기는 걸 막는다. */
 const GAMES = ["quiz", "hollywood", "highlow"]
-const MODES = ["", "fresh50"]
+const MODES = ["", "fresh50", "hard"]
 
 const NICK_MAX = 12
 const SCORE_MAX = 1000

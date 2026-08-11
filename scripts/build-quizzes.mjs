@@ -57,10 +57,39 @@ if (flags.hints) HINT_COUNT = Number(flags.hints)
  */
 const billingSteps = flags["max-billing"] ? [Number(flags["max-billing"])] : [8, 12, 20]
 
+/**
+ * 후보 목록에 담을 최대 비중 순위.
+ *
+ * 어려움 난이도가 비중 6~10위를 쓰므로 최소 10위까지는 실려야 한다.
+ * 20위까지 담아도 쉬움 난이도는 앞 5명만 보므로 영향을 받지 않는다.
+ * (예전에 첫 힌트가 너무 어렵다는 반응이 나왔던 건, 이 구간에서 무작위로 뽑았기 때문이다.
+ *  지금은 난이도가 어느 구간을 쓸지 정하므로 넓게 담아도 안전하다)
+ */
+const WIDE_BILLING = 20
+
 // ============================================
 
 const cast = JSON.parse(await readFile("data/kobis-cast.json", "utf8"))
 const box = JSON.parse(await readFile("data/kobis-boxoffice.json", "utf8"))
+
+/**
+ * 한국 영화만 낸다.
+ *
+ * 박스오피스는 '한국에서 팔린 표' 순위라 어벤져스·쿵푸팬더 같은 외화가 그대로 들어온다.
+ * 그러면 '한국 영화 맞추기' 라는 이름과 어긋나고, 헐리우드 퀴즈와 문제가 겹친다.
+ *
+ * 국적을 따로 조회하지 않고 KOBIS 의 '한국영화' 순위(--nation=K)와 교집합을 쓴다.
+ * 전체 순위 100위 안에 든 한국 영화는 한국영화 순위에도 반드시 들어 있으므로
+ * (부분 순위라 등수가 올라갈 뿐이다) 이 교집합은 정확하다.
+ */
+let koreanOnly = null
+try {
+  const kr = JSON.parse(await readFile("data/kobis-boxoffice-kr.json", "utf8"))
+  koreanOnly = new Set(kr.movies.map((m) => m.movieCd))
+} catch {
+  console.warn("경고: data/kobis-boxoffice-kr.json 이 없어 외화를 걸러내지 못합니다.")
+  console.warn("      node scripts/fetch-kobis-boxoffice.mjs --nation=K --out=data/kobis-boxoffice-kr.json\n")
+}
 
 // 사진은 KOBIS 인물 상세에서 받은 것을 쓴다.
 // peopleCd 로 직접 조회하므로 동명이인이 섞일 수 없다.
@@ -107,11 +136,13 @@ for (const m of box.movies) {
 // ============================================
 
 const quizzes = []
-const skipped = { noMeta: 0, notEnoughCast: 0, notEnoughPhoto: 0, lowAudi: 0 }
+const skipped = { noMeta: 0, notEnoughCast: 0, notEnoughPhoto: 0, lowAudi: 0, foreign: 0 }
 
 for (const [movieCd, list] of Object.entries(cast.castByMovie)) {
   const meta = movieMeta.get(movieCd)
   if (!meta) { skipped.noMeta++; continue }
+
+  if (koreanOnly && !koreanOnly.has(movieCd)) { skipped.foreign++; continue }
 
   if ((meta.audiAcc ?? 0) < minAudi) { skipped.lowAudi++; continue }
 
@@ -161,9 +192,18 @@ for (const [movieCd, list] of Object.entries(cast.castByMovie)) {
     }
   }
 
-  // 후보 전체를 담는다. 같은 영화가 다시 출제될 때 매번 다른 조합이 나오도록
-  // 5명을 고르는 일은 플레이 화면에서 한다.
-  const candidates = pool.map(toActor) // 비중 오름차순 (0번이 주연)
+  /**
+   * 후보는 넓게 담는다. 난이도별로 어디를 쓸지는 플레이 화면이 정한다.
+   *   쉬움   앞에서 5명 (비중 1~5위 = 주연과 낯익은 조연)
+   *   어려움 그다음 5명 (비중 6~10위 = 얼굴은 봤지만 이름은 모르는 자리)
+   *
+   * 위의 billingSteps 는 기본 힌트 세트(hints)를 만들 때만 쓴다. 그쪽은 검수 페이지와
+   * SQL 시드가 읽는 고정 조합이라 좁은 구간을 유지해야 한다.
+   */
+  // 비중 20위 밖 배우만 있는 영화가 있다(단역까지 훑어야 5명이 차는 경우).
+  // 좁히다 힌트 수를 못 채우면 넓은 쪽을 그대로 쓴다. 아예 못 내는 것보다 낫다.
+  const wide = usable.filter((p) => (p.sortSeq ?? 999) <= WIDE_BILLING)
+  const candidates = (wide.length >= HINT_COUNT ? wide : usable).map(toActor)
 
   // 기본 힌트 세트. 검수 페이지와 SQL 시드는 고정된 조합이 있어야 하므로
   // 주연과 가장 비중 낮은 후보를 양 끝에 두고 사이를 균등 분할해 만든다.

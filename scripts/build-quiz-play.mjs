@@ -305,6 +305,26 @@ const html = `<!doctype html>
   .hidden { display: none; }
 ${navCSS}
 ${rankCSS}
+
+  /* ── 난이도 ──────────────────────────────────────────────── */
+  .modes { display: flex; align-items: center; gap: 6px; margin: 14px 0 0; flex-wrap: wrap; }
+  .modes.hidden { display: none; }
+  .modes .lab {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.16em;
+    color: var(--muted-foreground); text-transform: uppercase; margin-right: 4px;
+  }
+  .modes button {
+    padding: 5px 11px; border: 1px solid var(--border); border-radius: 999px;
+    background: transparent; color: var(--muted-foreground);
+    font-family: inherit; font-size: 12.5px; cursor: pointer;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  .modes button:hover { color: var(--foreground); }
+  .modes button.on {
+    color: var(--primary-foreground); background: var(--primary); border-color: var(--primary);
+    font-weight: 600;
+  }
+  .modes .cnt { font-size: 11.5px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -314,6 +334,13 @@ ${rankCSS}
     <span class="score" id="score">1 / ${ROUNDS}판 · 0점</span>
   </header>
 ${navHTML(GAME)}
+
+  <div class="modes hidden" id="modes">
+    <span class="lab">난이도</span>
+    <button data-mode="">쉬움</button>
+    <button data-mode="hard">어려움</button>
+    <span class="cnt" id="modeCnt"></span>
+  </div>
 
   <section class="prompt">
     <span class="kicker">개봉 연도</span>
@@ -488,22 +515,51 @@ const MAX_SCORE = ROUNDS * (HINT_COUNT * 10);
 /** 이번 세션 상태. round 는 지금 푸는 판 번호(1부터). */
 let round = 1, score = 0, solved = 0, log = [];
 
+const MODE_KEY = 'noorung.${GAME}.mode';
+
+/**
+ * 난이도. '' = 쉬움 · 'hard' = 어려움.
+ * 어려움은 비중 6~10위를 쓰므로 후보가 10명 이상인 영화만 낼 수 있다.
+ */
+let mode = '';
+try { mode = localStorage.getItem(MODE_KEY) || ''; } catch (e) {}
+
+// 랜딩에서 난이도를 골라 들어온 경우가 지난 선택보다 우선한다.
+var qMode = new URLSearchParams(location.search).get('mode');
+if (qMode !== null) mode = qMode;
+if (mode !== 'hard') mode = '';
+
+/** 이번 난이도로 낼 수 있는 문제들. */
+const HARD_MIN = HINT_COUNT * 2;
+function QUIZ_POOL() {
+  const idx = [];
+  for (let i = 0; i < QUIZZES.length; i++) {
+    if (mode !== 'hard' || QUIZZES[i].c.length >= HARD_MIN) idx.push(i);
+  }
+  return idx;
+}
+
+/** 어려움을 낼 수 있는 영화가 없으면 난이도 선택 자체를 보여주지 않는다. */
+const HARD_COUNT = QUIZZES.filter(q => q.c.length >= HARD_MIN).length;
+if (!HARD_COUNT) mode = '';
+
 /**
  * 기록은 이 브라우저에만 남는다.
  * 정적 페이지라 서버가 없다. 순위표를 만들려면 백엔드가 따로 있어야 한다.
  * 키에 페이지 이름을 붙여 한국 영화 퀴즈와 헐리우드 퀴즈의 기록이 섞이지 않게 한다.
  */
-const KEY = 'noorung-quiz-record:${SLUG}';
+// 난이도마다 다른 게임이나 마찬가지다. 기록을 섞으면 어느 쪽 점수인지 알 수 없다.
+const recKey = () => 'noorung-quiz-record:${SLUG}' + (mode ? ':' + mode : '');
 
 /** 사생활 보호 모드에서는 localStorage 접근 자체가 예외를 던진다. 기록이 없다고 게임이 멈추면 안 된다. */
 function loadRecords() {
-  try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; }
+  try { return JSON.parse(localStorage.getItem(recKey()) || '[]'); } catch (e) { return []; }
 }
 function saveRecord(rec) {
   try {
     const all = loadRecords();
     all.unshift(rec);
-    localStorage.setItem(KEY, JSON.stringify(all.slice(0, 20)));  // 최근 20판만 남긴다
+    localStorage.setItem(recKey(), JSON.stringify(all.slice(0, 20)));  // 최근 20판만 남긴다
     return all;
   } catch (e) { return [rec]; }
 }
@@ -517,22 +573,30 @@ function saveRecord(rec) {
  *   - 나머지는 무작위로 뽑아 비중이 낮은 순으로 늘어놓는다.
  * 결과적으로 '조연 → 주연' 흐름은 유지되면서 조합만 바뀐다.
  */
-function drawHints(cand) {
-  if (cand.length <= HINT_COUNT) return cand.slice().reverse();
+/**
+ * 난이도 = 후보 목록의 어느 구간을 쓰는가.
+ *
+ *   쉬움   앞에서 5명  (비중 1~5위 · 주연이 마지막에 나온다)
+ *   어려움 그다음 5명  (비중 6~10위 · 주연은 끝까지 안 나온다)
+ *
+ * 비중 '숫자' 가 아니라 목록의 '자리' 로 자른다. 사진이 없어 빠진 배우 때문에
+ * 비중 번호에는 구멍이 있다(6·7·8·9·11 처럼). 자리로 세면 그 구멍과 무관하게
+ * 언제나 5명이 채워진다.
+ *
+ * 어느 쪽이든 공개 순서는 '비중 낮은 쪽 → 높은 쪽' 이다. 단서가 점점 세져야 한다.
+ */
+const SLICE = { '': [0, HINT_COUNT], hard: [HINT_COUNT, HINT_COUNT * 2] };
 
-  const lead = cand[0];                       // 비중 1위
-  const rest = cand.slice(1);
-  for (let i = rest.length - 1; i > 0; i--) { // 부분 셔플
-    const j = Math.floor(Math.random() * (i + 1));
-    [rest[i], rest[j]] = [rest[j], rest[i]];
-  }
-  const chosen = rest.slice(0, HINT_COUNT - 1);
-  chosen.sort((a, b) => b.b - a.b);           // 비중 낮은 순(숫자 큰 순)
-  return [...chosen, lead];
+function drawHints(cand) {
+  const [from, to] = SLICE[mode] || SLICE[''];
+  const part = cand.slice(from, to);
+  // 어려움 구간이 모자라면(후보가 적은 영화) 뒤에서부터 5명을 끌어온다.
+  const five = part.length >= HINT_COUNT ? part : cand.slice(-HINT_COUNT);
+  return five.slice().reverse();
 }
 
 function pick() {
-  if (!pool.length) pool = QUIZZES.map((_, i) => i).sort(() => Math.random() - 0.5);
+  if (!pool.length) pool = QUIZ_POOL().sort(() => Math.random() - 0.5);
   cur = QUIZZES[pool.pop()];
   hints = drawHints(cur.c);
   shown = 0;
@@ -693,12 +757,35 @@ function showSummary() {
   $('again').focus();
 
   // 점수를 올릴 수 있게 랭킹판을 연다. 0점이면 입력칸은 열리지 않는다.
-  RANK.offer(score);
+  RANK.offer(score, mode);
 }
 
+/** 난이도 버튼. 바꾸면 진행 중인 세션은 버리고 처음부터 다시 시작한다. */
+function paintModes() {
+  $('modes').classList.toggle('hidden', !HARD_COUNT);
+  document.querySelectorAll('#modes button').forEach(b => {
+    b.classList.toggle('on', b.dataset.mode === mode);
+  });
+  $('modeCnt').textContent = QUIZ_POOL().length.toLocaleString() + '편';
+}
+
+document.querySelectorAll('#modes button').forEach(b => {
+  b.onclick = () => {
+    if (b.dataset.mode === mode) return;
+    mode = b.dataset.mode;
+    try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
+    round = 1; score = 0; solved = 0; log = []; pool = [];
+    $('summary').classList.add('hidden');
+    paintModes();
+    RANK.setMode(mode);
+    pick();
+  };
+});
+
+paintModes();
 paintScore();
 pick();
-RANK.refresh();
+RANK.setMode(mode);
 </script>
 </body>
 </html>`

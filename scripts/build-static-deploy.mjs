@@ -34,6 +34,10 @@ const GAMES = [
     desc: "배우 얼굴만 보고 한국 영화를 맞힙니다. 비중이 낮은 배우부터 공개됩니다.",
     tag: "한국 영화",
     countFrom: async () => (JSON.parse(await readFile("data/quizzes.json", "utf8"))).count,
+    entries: [
+      { label: "쉬움", query: "" },
+      { label: "어려움", query: "?mode=hard" },
+    ],
   },
   {
     slug: "highlow",
@@ -55,6 +59,7 @@ const GAMES = [
     desc: "같은 규칙, 무대만 헐리우드입니다. 원제로 답해도 정답으로 인정합니다.",
     tag: "헐리우드",
     countFrom: async () => (JSON.parse(await readFile("data/hollywood-quizzes.json", "utf8"))).count,
+    // 난이도 칩이 없다. 로튼은 배우를 5명만 주므로 '어려움'(비중 6~10위)을 낼 수 없다.
   },
 ]
 
