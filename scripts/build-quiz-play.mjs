@@ -39,6 +39,8 @@
  */
 
 import { readFile, writeFile } from "node:fs/promises"
+import { navCSS, navHTML, navScript } from "./play-nav.mjs"
+import { rankCSS, rankHTML, rankScript } from "./play-rank.mjs"
 
 const flags = {}
 for (const arg of process.argv.slice(2)) {
@@ -88,6 +90,9 @@ const ROUNDS = Number(flags.rounds || 5)
  * 한국 영화 퀴즈와 헐리우드 퀴즈가 같은 브라우저에서 서로의 기록을 덮어쓰면 안 된다.
  */
 const SLUG = OUT_PATH.split(/[\\/]/).pop().replace(/\.html?$/i, "")
+
+/** 랭킹·메뉴에서 이 페이지를 가리키는 이름. 배포 경로(/quiz · /hollywood)와 같다. */
+const GAME = String(flags.game || (SLUG.startsWith("hollywood") ? "hollywood" : "quiz"))
 
 // 페이지에 담을 최소 정보만 추린다.
 // c = 후보 배우 전체(비중 오름차순, 0번이 주연). 5명 선택은 플레이할 때 한다.
@@ -298,6 +303,8 @@ const html = `<!doctype html>
   .foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border);
     font-size: 11.5px; color: var(--muted-foreground); }
   .hidden { display: none; }
+${navCSS}
+${rankCSS}
 </style>
 </head>
 <body>
@@ -306,6 +313,7 @@ const html = `<!doctype html>
     <h1 class="brand">${TITLE}<span>누룽지 극장</span></h1>
     <span class="score" id="score">1 / ${ROUNDS}판 · 0점</span>
   </header>
+${navHTML(GAME)}
 
   <section class="prompt">
     <span class="kicker">개봉 연도</span>
@@ -351,6 +359,8 @@ const html = `<!doctype html>
     <button class="btn" id="again">다시 하기</button>
   </section>
 
+${rankHTML("랭킹")}
+
   <footer class="foot">비중이 낮은 배우부터 공개됩니다. 힌트를 적게 볼수록 점수가 높습니다.
     ${ROUNDS}판을 풀면 점수가 이 브라우저에 기록됩니다.</footer>
 </div>
@@ -358,6 +368,8 @@ const html = `<!doctype html>
 <script>
 const QUIZZES = ${JSON.stringify(quizzes)};
 const HINT_COUNT = ${HINT_COUNT};
+${navScript}
+${rankScript({ game: GAME, unit: "점", localKey: `noorung-quiz-record:${SLUG}` })}
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
@@ -679,10 +691,14 @@ function showSummary() {
   $('result').classList.add('hidden');
   $('summary').classList.remove('hidden');
   $('again').focus();
+
+  // 점수를 올릴 수 있게 랭킹판을 연다. 0점이면 입력칸은 열리지 않는다.
+  RANK.offer(score);
 }
 
 paintScore();
 pick();
+RANK.refresh();
 </script>
 </body>
 </html>`

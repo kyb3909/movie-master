@@ -69,6 +69,37 @@ if (await exists("data/quiz-preview.html")) {
 }
 
 // ============================================
+// 랭킹 API
+// ============================================
+
+/**
+ * 게임 페이지들이 부르는 /api/rank 를 함께 싣는다.
+ * Vercel 은 api/ 아래 파일을 서버리스 함수로 잡으므로 별도 설정이 필요 없다.
+ *
+ * 저장소는 Vercel Blob 이고, 토큰(BLOB_READ_WRITE_TOKEN)은 프로젝트 환경 변수로 들어온다.
+ * 토큰이 없으면 함수가 500 을 내고, 페이지는 '랭킹을 불러오지 못했습니다' 로 남는다.
+ * 게임 자체는 그대로 돌아간다.
+ */
+await mkdir(`${OUT}/api`, { recursive: true })
+await copyFile("scripts/deploy-api/rank.js", `${OUT}/api/rank.js`)
+
+// 함수가 @vercel/blob 을 쓰므로 의존성을 선언한다. Vercel 이 빌드 때 설치한다.
+await writeFile(
+  `${OUT}/package.json`,
+  JSON.stringify(
+    {
+      name: "noorung-quiz",
+      private: true,
+      type: "module",
+      dependencies: { "@vercel/blob": "^2.0.0" },
+    },
+    null,
+    2
+  ),
+  "utf8"
+)
+
+// ============================================
 // 랜딩
 // ============================================
 

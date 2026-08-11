@@ -25,6 +25,8 @@
  */
 
 import { readFile, writeFile } from "node:fs/promises"
+import { navCSS, navHTML, navScript } from "./play-nav.mjs"
+import { rankCSS, rankHTML, rankScript } from "./play-rank.mjs"
 
 /**
  * 입력은 scripts/build-hollywood-catalog.mjs 가 만든 한 파일뿐이다.
@@ -371,6 +373,27 @@ const html = `<!doctype html>
   .foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border);
     font-size: 11.5px; color: var(--muted-foreground); }
   .hidden { display: none; }
+${navCSS}
+${rankCSS}
+
+  /* ── 난이도 ──────────────────────────────────────────────── */
+  .modes { display: flex; align-items: center; gap: 6px; margin: 14px 0 0; flex-wrap: wrap; }
+  .modes .lab {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.16em;
+    color: var(--muted-foreground); text-transform: uppercase; margin-right: 4px;
+  }
+  .modes button {
+    padding: 5px 11px; border: 1px solid var(--border); border-radius: 999px;
+    background: transparent; color: var(--muted-foreground);
+    font-family: inherit; font-size: 12.5px; cursor: pointer;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  .modes button:hover { color: var(--foreground); }
+  .modes button.on {
+    color: var(--primary-foreground); background: var(--primary); border-color: var(--primary);
+    font-weight: 600;
+  }
+  .modes .cnt { font-size: 11.5px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -379,6 +402,14 @@ const html = `<!doctype html>
     <h1 class="brand">로튼 하이로우<span>누룽지 극장</span></h1>
     <span class="score" id="score">연속 <b>0</b> · 최고 0</span>
   </header>
+${navHTML("highlow")}
+
+  <div class="modes" id="modes">
+    <span class="lab">난이도</span>
+    <button data-mode="" class="on">전체</button>
+    <button data-mode="fresh50">신선한 영화만</button>
+    <span class="cnt" id="modeCnt"></span>
+  </div>
 
   <section class="prompt">
     <span class="kicker" id="pLabel">Round 1</span>
@@ -394,24 +425,54 @@ const html = `<!doctype html>
     <figure class="pane" id="paneR"></figure>
   </div>
 
-  <footer class="foot">로튼토마토 신선도(Tomatometer) 기준입니다. 동점은 정답으로 처리됩니다.</footer>
+${rankHTML("랭킹")}
+
+  <footer class="foot">로튼토마토 신선도(Tomatometer) 기준입니다. 동점은 정답으로 처리됩니다.
+    '신선한 영화만' 은 지수 50 이상인 작품끼리 겨룹니다.</footer>
 </div>
 
 <script>
-const MOVIES = ${JSON.stringify(movies)};
+const ALL_MOVIES = ${JSON.stringify(movies)};
 const BEST_KEY = 'noorung.highlow.best';
+const MODE_KEY = 'noorung.highlow.mode';
+
+/**
+ * 난이도 = 출제 대상 좁히기.
+ *
+ * 하한 없이 내면 지수 한 자리대의 졸작이 절반씩 섞여 나온다. 아무도 모르는 영화라
+ * 찍는 것 말고 할 수 있는 게 없다. 'fresh50' 은 지수 50 이상만 남긴다.
+ * (로튼이 Fresh 로 치는 공식 경계는 60 이다. 더 좁히려면 이 값을 60 으로 올린다)
+ *
+ * 다만 쉬워지지는 않는다. 50~100 안에서 겨루면 두 지수가 붙어 오히려 가르기 어렵다.
+ * 아는 영화로 고민하게 만드는 것이 목적이지, 정답률을 올리는 것이 목적이 아니다.
+ */
+const FRESH_MIN = 50;
+const POOLS = {
+  '': ALL_MOVIES,
+  fresh50: ALL_MOVIES.filter(function (m) { return m.s >= FRESH_MIN; }),
+};
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+${navScript}
+${rankScript({ game: "highlow", unit: "연속", localKey: "" })}
 
 /**
  * 방금 나온 영화가 곧바로 다시 나오지 않도록 최근 등장분을 제외한다.
  * 목록이 짧으면 제외 폭도 줄여야 뽑을 후보가 남는다.
  * (제외 목록에는 화면의 두 편도 들어가므로 최소 2편은 남겨둔다)
  */
-const RECENT_MAX = Math.min(8, Math.max(2, Math.floor(MOVIES.length / 3)));
+let MOVIES = POOLS[''];
+let RECENT_MAX = 8;
 let recent = [];
+
+/** 난이도를 바꾸면 출제 목록이 통째로 갈린다. 최근 등장분도 함께 버린다. */
+function usePool(mode) {
+  MOVIES = POOLS[mode] && POOLS[mode].length >= 4 ? POOLS[mode] : POOLS[''];
+  RECENT_MAX = Math.min(8, Math.max(2, Math.floor(MOVIES.length / 3)));
+  recent = [];
+}
 
 function draw() {
   const banned = new Set(recent);
@@ -458,10 +519,19 @@ const CHOICE =
 
 let left, right, streak = 0, best = 0, round = 1, locked = false;
 
-try { best = Number(localStorage.getItem(BEST_KEY)) || 0; } catch (e) {}
+/** 난이도마다 출제 목록이 다르니 최고 기록도 따로 센다. 섞으면 어느 쪽 기록인지 알 수 없다. */
+let mode = '';
+try { mode = localStorage.getItem(MODE_KEY) || ''; } catch (e) {}
+if (!POOLS[mode]) mode = '';
+
+const bestKey = () => BEST_KEY + (mode ? '.' + mode : '');
+
+function loadBest() {
+  try { best = Number(localStorage.getItem(bestKey())) || 0; } catch (e) { best = 0; }
+}
 
 function saveBest() {
-  try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {}
+  try { localStorage.setItem(bestKey(), String(best)); } catch (e) {}
 }
 
 function paintScore() {
@@ -554,6 +624,7 @@ function advance() {
 }
 
 function gameOver() {
+  const result = round - 1;   // 이번 판에 몇 번 연속으로 맞혔나
   streak = 0;
   paintScore();
   // 못 누르는 버튼을 남겨두면 '다시 하기' 를 못 찾고 저기를 누른다.
@@ -563,11 +634,14 @@ function gameOver() {
   $('pLabel').className = 'kicker bad';
   $('pText').classList.add('hidden');
   $('pBig').classList.remove('hidden');
-  $('pBig').innerHTML = (round - 1) + '<em>연속</em>';
+  $('pBig').innerHTML = result + '<em>연속</em>';
   $('pMeta').classList.remove('hidden');
   $('pMeta').textContent =
     left.t + ' ' + left.s + '%  ·  ' + right.t + ' ' + right.s + '%  ·  최고 기록 ' + best;
   $('again').classList.remove('hidden');
+
+  // 이번 판 기록을 랭킹에 올릴 수 있게 연다. 0연속이면 입력칸은 열리지 않는다.
+  RANK.offer(result, mode);
 }
 
 function start() {
@@ -582,8 +656,41 @@ function start() {
   askPrompt();
 }
 
+/** 난이도 버튼. 바꾸면 진행 중인 판은 버리고 새로 시작한다. */
+function paintModes() {
+  document.querySelectorAll('#modes button').forEach(b => {
+    b.classList.toggle('on', b.dataset.mode === mode);
+  });
+  $('modeCnt').textContent = MOVIES.length.toLocaleString() + '편';
+}
+
+document.querySelectorAll('#modes button').forEach(b => {
+  b.onclick = () => {
+    if (b.dataset.mode === mode) return;
+    mode = b.dataset.mode;
+    try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
+    usePool(mode);
+    loadBest();
+    paintModes();
+    // 못 누르는 선택지가 남아 있으면 새 판에서 두 번 그려진다.
+    const c = $('choice');
+    if (c) c.remove();
+    $('again').classList.add('hidden');
+    $('pBig').classList.add('hidden');
+    $('pMeta').classList.add('hidden');
+    $('pText').classList.remove('hidden');
+    RANK.setMode(mode);
+    start();
+  };
+});
+
 $('again').onclick = start;
+
+usePool(mode);
+loadBest();
+paintModes();
 start();
+RANK.setMode(mode);
 </script>
 </body>
 </html>`
