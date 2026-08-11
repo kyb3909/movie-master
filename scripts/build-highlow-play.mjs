@@ -25,7 +25,7 @@
  */
 
 import { readFile, writeFile } from "node:fs/promises"
-import { navCSS, navHTML, navScript } from "./play-nav.mjs"
+import { homeHTML, navCSS, navHTML, navScript } from "./play-nav.mjs"
 import { rankCSS, rankHTML, rankScript } from "./play-rank.mjs"
 
 /**
@@ -399,7 +399,7 @@ ${rankCSS}
 <body>
 <div class="wrap">
   <header class="masthead">
-    <h1 class="brand">로튼 하이로우<span>누룽지 극장</span></h1>
+    <h1 class="brand">로튼 하이로우<span>${homeHTML}</span></h1>
     <span class="score" id="score">연속 <b>0</b> · 최고 0</span>
   </header>
 ${navHTML("highlow")}
@@ -522,6 +522,11 @@ let left, right, streak = 0, best = 0, round = 1, locked = false;
 /** 난이도마다 출제 목록이 다르니 최고 기록도 따로 센다. 섞으면 어느 쪽 기록인지 알 수 없다. */
 let mode = '';
 try { mode = localStorage.getItem(MODE_KEY) || ''; } catch (e) {}
+
+// 랜딩에서 난이도를 골라 들어온 경우(/highlow?mode=fresh50)가 지난 선택보다 우선한다.
+var qMode = new URLSearchParams(location.search).get('mode');
+if (qMode !== null) mode = qMode;
+
 if (!POOLS[mode]) mode = '';
 
 const bestKey = () => BEST_KEY + (mode ? '.' + mode : '');

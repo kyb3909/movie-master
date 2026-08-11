@@ -39,7 +39,7 @@
  */
 
 import { readFile, writeFile } from "node:fs/promises"
-import { navCSS, navHTML, navScript } from "./play-nav.mjs"
+import { homeHTML, navCSS, navHTML, navScript } from "./play-nav.mjs"
 import { rankCSS, rankHTML, rankScript } from "./play-rank.mjs"
 
 const flags = {}
@@ -310,7 +310,7 @@ ${rankCSS}
 <body>
 <div class="wrap">
   <header class="masthead">
-    <h1 class="brand">${TITLE}<span>누룽지 극장</span></h1>
+    <h1 class="brand">${TITLE}<span>${homeHTML}</span></h1>
     <span class="score" id="score">1 / ${ROUNDS}판 · 0점</span>
   </header>
 ${navHTML(GAME)}

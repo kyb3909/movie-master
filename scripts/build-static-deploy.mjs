@@ -42,6 +42,11 @@ const GAMES = [
     desc: "두 영화의 로튼토마토 지수를 비교합니다. 몇 번 연속으로 맞힐 수 있는지 겨룹니다.",
     tag: "헐리우드",
     countFrom: async () => (JSON.parse(await readFile("data/hollywood-catalog.json", "utf8"))).count,
+    // 난이도는 들어가기 전에 고른다. 게임 안에도 같은 버튼이 있어 도중에 바꿀 수 있다.
+    entries: [
+      { label: "전체", query: "" },
+      { label: "신선한 영화만", query: "?mode=fresh50" },
+    ],
   },
   {
     slug: "hollywood",
@@ -110,15 +115,37 @@ await writeFile(
  */
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))
 
+/**
+ * 카드 전체가 링크였는데, 난이도가 생기면서 카드 안에 링크가 또 필요해졌다.
+ * 링크 안에 링크는 넣을 수 없으므로(브라우저가 마크업을 고쳐버린다)
+ * 난이도가 있는 게임은 카드를 div 로 두고 제목과 난이도 칩을 각각 링크로 만든다.
+ */
 const cards = shipped
-  .map(
-    (g) => `      <a class="card" href="/${g.slug}">
+  .map((g) => {
+    const meta = `        <p>${esc(g.desc)}</p>
+        <span class="count">${g.count != null ? `${g.count.toLocaleString()}편 수록` : "&nbsp;"}</span>`
+
+    if (!g.entries) {
+      return `      <a class="card" href="/${g.slug}">
         <span class="tag">${esc(g.tag)}</span>
         <h2>${esc(g.name)}</h2>
-        <p>${esc(g.desc)}</p>
-        <span class="count">${g.count != null ? `${g.count.toLocaleString()}편 수록` : "&nbsp;"}</span>
+${meta}
       </a>`
-  )
+    }
+
+    const chips = g.entries
+      .map((e) => `          <a href="/${g.slug}${e.query}">${esc(e.label)}</a>`)
+      .join("\n")
+
+    return `      <div class="card">
+        <span class="tag">${esc(g.tag)}</span>
+        <h2><a href="/${g.slug}">${esc(g.name)}</a></h2>
+${meta}
+        <div class="entries">
+${chips}
+        </div>
+      </div>`
+  })
   .join("\n")
 
 const index = `<!doctype html>
@@ -187,11 +214,21 @@ const index = `<!doctype html>
     color: var(--muted-foreground); text-transform: uppercase;
   }
   .card h2 { margin: 8px 0 0; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+  .card h2 a { color: inherit; text-decoration: none; }
   .card p { margin: 8px 0 16px; font-size: 13px; color: var(--muted-foreground); flex: 1; }
   .card .count {
     font-size: 11.5px; color: var(--muted-foreground);
     font-variant-numeric: tabular-nums; border-top: 1px solid var(--border); padding-top: 10px;
   }
+
+  /* 난이도 — 어느 쪽으로 들어갈지 카드에서 바로 고른다. */
+  .entries { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .entries a {
+    padding: 5px 11px; border: 1px solid var(--border); border-radius: 999px;
+    font-size: 12.5px; color: var(--muted-foreground); text-decoration: none;
+    transition: color .15s, border-color .15s;
+  }
+  .entries a:hover { color: var(--foreground); border-color: var(--foreground); }
 
   .foot {
     margin-top: 44px; padding-top: 16px; border-top: 1px solid var(--border);
