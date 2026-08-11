@@ -18,10 +18,15 @@
  *   --out    출력 HTML                 (기본 data/quiz-play.html)
  *   --title  마스트헤드·탭 제목        (기본 "영화 제목 맞추기")
  *   --stat   결과 화면에 붙는 흥행 지표 (audi = 누적 관객 · gross = 북미 흥행)
+ *   --rounds 한 세션에 푸는 판 수       (기본 5)
  *
  * --- 게임 규칙 ---
  * 힌트 1(비중 낮은 조연)부터 하나씩 공개하고, 틀리면 다음 힌트를 연다.
  * 적게 열수록 점수가 높다. 힌트 개수는 quizzes.json 이 정한다.
+ *
+ * 5판을 한 세션으로 묶어 정산한다. 끝없이 이어지면 '오늘 몇 점이었나' 를 말할 수 없고,
+ * 그만둘 지점도 각자 달라 기록끼리 견줄 수 없기 때문이다.
+ * 세션 점수는 localStorage 에 최근 20판까지 남는다(브라우저 한정 · 서버 없음).
  * 개봉 연도는 처음부터 공개한다. 배우만으로는 너무 어렵다는 반응이 많았다.
  *
  * 배역명은 정답을 열기 전까지 숨긴다. '이순신' 같은 배역명이 뜨면
@@ -74,6 +79,15 @@ const data = JSON.parse(await readFile(IN_PATH, "utf8"))
 
 /** 한 판에 보여줄 힌트 수. 생성된 기본 세트의 길이를 따른다. */
 const HINT_COUNT = data.quizzes[0]?.hints.length ?? 5
+
+/** 한 세션에 푸는 판 수. 이만큼 풀면 점수를 정산해 기록에 남긴다. */
+const ROUNDS = Number(flags.rounds || 5)
+
+/**
+ * 기록 저장 키에 붙일 이름. 출력 파일 이름에서 딴다.
+ * 한국 영화 퀴즈와 헐리우드 퀴즈가 같은 브라우저에서 서로의 기록을 덮어쓰면 안 된다.
+ */
+const SLUG = OUT_PATH.split(/[\\/]/).pop().replace(/\.html?$/i, "")
 
 // 페이지에 담을 최소 정보만 추린다.
 // c = 후보 배우 전체(비중 오름차순, 0번이 주연). 5명 선택은 플레이할 때 한다.
@@ -252,6 +266,35 @@ const html = `<!doctype html>
     line-height: 1.2; }
   .rmeta { margin: 8px 0 20px; font-size: 13px; color: var(--muted-foreground);
     font-variant-numeric: tabular-nums; }
+  /* ── 세션 결과(5판 정산) ─────────────────────────────────── */
+  .summary { margin-top: 26px; padding-top: 24px; border-top: 1px solid var(--foreground); }
+  .summary .total { margin: 10px 0 0; letter-spacing: -0.04em; line-height: 1; }
+  .summary .total b { font-size: 52px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .summary .total span { margin-left: 8px; font-size: 15px; font-weight: 500;
+    color: var(--muted-foreground); }
+  .summary .best { margin: 0 0 18px; font-size: 13px; font-weight: 600; color: var(--success); }
+
+  /* 판별 요약. 어디서 점수를 흘렸는지 한눈에 보이게 한 줄씩 세운다. */
+  .slog { list-style: none; margin: 0 0 24px; padding: 0; border-top: 1px solid var(--border); }
+  .slog li { display: flex; align-items: center; gap: 10px; padding: 9px 0;
+    border-bottom: 1px solid var(--border); font-size: 13px; }
+  .slog .n { width: 18px; font-size: 11px; color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums; }
+  .slog .t { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; }
+  .slog .p { font-size: 11.5px; color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums; }
+  .slog li.lose .t { color: var(--muted-foreground); }
+  .slog li.win .p { color: var(--success); }
+
+  .hist { margin: 0 0 24px; }
+  .hist ol { list-style: none; margin: 10px 0 0; padding: 0; }
+  .hist li { display: flex; align-items: center; gap: 12px; padding: 6px 0;
+    font-size: 12.5px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .hist li.now { color: var(--foreground); font-weight: 600; }
+  .hist .d { width: 74px; }
+  .hist .v { width: 54px; }
+
   .foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border);
     font-size: 11.5px; color: var(--muted-foreground); }
   .hidden { display: none; }
@@ -261,7 +304,7 @@ const html = `<!doctype html>
 <div class="wrap">
   <header class="masthead">
     <h1 class="brand">${TITLE}<span>누룽지 극장</span></h1>
-    <span class="score" id="score">0전 0승 · 0점</span>
+    <span class="score" id="score">1 / ${ROUNDS}판 · 0점</span>
   </header>
 
   <section class="prompt">
@@ -292,7 +335,24 @@ const html = `<!doctype html>
     <button class="btn" id="next">다음 문제</button>
   </section>
 
-  <footer class="foot">비중이 낮은 배우부터 공개됩니다. 힌트를 적게 볼수록 점수가 높습니다.</footer>
+  <section class="summary hidden" id="summary">
+    <span class="kicker">${ROUNDS}판 완료</span>
+    <p class="total"><b id="sScore">0</b><span id="sMax"></span></p>
+    <p class="rmeta" id="sLine"></p>
+    <p class="best hidden" id="sBest">자기 최고 기록을 세웠습니다</p>
+
+    <ol class="slog" id="sLog"></ol>
+
+    <div class="hist hidden" id="sHist">
+      <span class="kicker">지난 기록</span>
+      <ol id="sHistList"></ol>
+    </div>
+
+    <button class="btn" id="again">다시 하기</button>
+  </section>
+
+  <footer class="foot">비중이 낮은 배우부터 공개됩니다. 힌트를 적게 볼수록 점수가 높습니다.
+    ${ROUNDS}판을 풀면 점수가 이 브라우저에 기록됩니다.</footer>
 </div>
 
 <script>
@@ -404,7 +464,37 @@ function accepts(answers, guess) {
   return false;
 }
 
-let pool = [], cur = null, hints = [], shown = 0, played = 0, solved = 0, score = 0;
+let pool = [], cur = null, hints = [], shown = 0;
+
+/** 이번 판의 정산이 끝났는지. finish() 를 두 번 돌지 않게 막는다. */
+let over = false;
+
+/** 한 세션 = ROUNDS 판. 다 풀면 결과를 정산하고 기록에 남긴다. */
+const ROUNDS = ${ROUNDS};
+const MAX_SCORE = ROUNDS * (HINT_COUNT * 10);
+
+/** 이번 세션 상태. round 는 지금 푸는 판 번호(1부터). */
+let round = 1, score = 0, solved = 0, log = [];
+
+/**
+ * 기록은 이 브라우저에만 남는다.
+ * 정적 페이지라 서버가 없다. 순위표를 만들려면 백엔드가 따로 있어야 한다.
+ * 키에 페이지 이름을 붙여 한국 영화 퀴즈와 헐리우드 퀴즈의 기록이 섞이지 않게 한다.
+ */
+const KEY = 'noorung-quiz-record:${SLUG}';
+
+/** 사생활 보호 모드에서는 localStorage 접근 자체가 예외를 던진다. 기록이 없다고 게임이 멈추면 안 된다. */
+function loadRecords() {
+  try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; }
+}
+function saveRecord(rec) {
+  try {
+    const all = loadRecords();
+    all.unshift(rec);
+    localStorage.setItem(KEY, JSON.stringify(all.slice(0, 20)));  // 최근 20판만 남긴다
+    return all;
+  } catch (e) { return [rec]; }
+}
 
 /**
  * 후보 배우 중에서 이번 판에 쓸 힌트를 뽑는다.
@@ -434,6 +524,7 @@ function pick() {
   cur = QUIZZES[pool.pop()];
   hints = drawHints(cur.c);
   shown = 0;
+  over = false;
 
   $('year').innerHTML = cur.y
     ? esc(cur.y) + '<em>년 개봉</em>'
@@ -454,6 +545,7 @@ function pick() {
   $('result').classList.add('hidden');
   $('f').classList.remove('hidden');
   $('msg').classList.remove('hidden');
+  paintScore();
   reveal();
   $('guess').focus();
 }
@@ -477,15 +569,23 @@ function reveal() {
 const points = used => (hints.length + 1 - used) * 10;
 
 function finish(win) {
+  // 한 판은 한 번만 정산한다. 힌트를 다 쓴 뒤 답이 한 번 더 들어오면
+  // (폼을 숨기기 전에 엔터가 겹치는 등) 같은 판이 두 번 기록되고 점수도 두 번 들어간다.
+  if (over) return;
+  over = true;
+
   const used = shown;                 // 공개를 마저 하기 전에 세어둔다
-  played++;
-  if (win) { solved++; score += points(used); }
+  const got = win ? points(used) : 0;
+  if (win) { solved++; score += got; }
+  log.push({ t: cur.t, win: win, used: used, p: got });
 
   while (shown < hints.length) reveal();
   // 배역명은 이제 공개해도 된다.
   document.querySelectorAll('.ch').forEach(e => { e.textContent = e.dataset.ch || '—'; });
 
-  $('score').textContent = played + '전 ' + solved + '승 · ' + score + '점';
+  paintScore();
+  // 마지막 판이면 '다음 문제' 대신 세션 결과로 넘긴다.
+  $('next').textContent = round >= ROUNDS ? '결과 보기' : '다음 문제';
   $('rLabel').textContent = win ? '정답입니다' : '정답';
   $('rLabel').className = win ? 'kicker win' : 'kicker';
   $('rTitle').textContent = cur.t;
@@ -519,8 +619,69 @@ $('f').onsubmit = e => {
 };
 
 $('skip').onclick = () => finish(false);
-$('next').onclick = pick;
 
+$('next').onclick = () => {
+  if (round >= ROUNDS) { showSummary(); return; }
+  round++;
+  pick();
+};
+
+$('again').onclick = () => {
+  round = 1; score = 0; solved = 0; log = [];
+  $('summary').classList.add('hidden');
+  pick();
+};
+
+function paintScore() {
+  $('score').textContent = round + ' / ' + ROUNDS + '판 · ' + score + '점';
+}
+
+/** 날짜는 '8월 12일' 정도면 충분하다. 기록을 되짚을 때 필요한 건 순서와 대략의 시점뿐이다. */
+const fmtDate = iso => {
+  const d = new Date(iso);
+  return (d.getMonth() + 1) + '월 ' + d.getDate() + '일';
+};
+
+function showSummary() {
+  // 정산은 여기서 딱 한 번 한다. 결과 화면을 다시 열어도 기록이 두 번 쌓이면 안 된다.
+  const rec = { at: new Date().toISOString(), s: score, w: solved, r: ROUNDS };
+  const all = saveRecord(rec);
+
+  // 방금 판을 뺀 지난 기록과 견준다. '자기 최고' 는 갱신했을 때 알려줘야 의미가 있다.
+  const past = all.slice(1);
+  const best = past.reduce((m, x) => Math.max(m, x.s), 0);
+  const isBest = past.length > 0 && score > best;
+
+  $('sScore').textContent = score;
+  $('sMax').textContent = '/ ' + MAX_SCORE + '점';
+  $('sLine').textContent = ROUNDS + '판 중 ' + solved + '판 정답'
+    + (past.length ? '  ·  지난 최고 ' + best + '점' : '');
+  $('sBest').classList.toggle('hidden', !isBest);
+
+  $('sLog').innerHTML = log.map((x, i) =>
+    '<li class="' + (x.win ? 'win' : 'lose') + '">' +
+      '<span class="n">' + (i + 1) + '</span>' +
+      '<span class="t">' + esc(x.t) + '</span>' +
+      '<span class="p">' + (x.win ? '힌트 ' + x.used + '개 · +' + x.p : '실패') + '</span>' +
+    '</li>'
+  ).join('');
+
+  // 기록이 이번 판 하나뿐이면 목록을 보여줄 이유가 없다.
+  $('sHist').classList.toggle('hidden', all.length < 2);
+  $('sHistList').innerHTML = all.slice(0, 10).map((x, i) =>
+    '<li' + (i === 0 ? ' class="now"' : '') + '>' +
+      '<span class="d">' + fmtDate(x.at) + '</span>' +
+      '<span class="v">' + x.s + '점</span>' +
+      '<span class="w">' + x.w + '/' + (x.r || ROUNDS) + '</span>' +
+    '</li>'
+  ).join('');
+
+  $('result').classList.add('hidden');
+  $('summary').classList.remove('hidden');
+  $('again').focus();
+}
+
+paintScore();
 pick();
 </script>
 </body>
