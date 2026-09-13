@@ -140,10 +140,24 @@ for (const m of [...box.movies, ...krMovies]) {
 
 // ============================================
 
+/**
+ * 사람이 검수한 결과. 검수 페이지에서 내려받아 덮어쓰는 파일이다.
+ * 얼굴만으로는 도저히 못 맞히는 영화를 자동 규칙만으로는 다 거르지 못한다.
+ */
+let excluded = new Set()
+try {
+  const ov = JSON.parse(await readFile("data/quiz-overrides.json", "utf8"))
+  excluded = new Set(ov.excluded?.quiz ?? [])
+} catch {
+  // 검수 전이면 파일이 없다. 그대로 진행한다.
+}
+
 const quizzes = []
-const skipped = { noMeta: 0, notEnoughCast: 0, notEnoughPhoto: 0, lowAudi: 0, foreign: 0 }
+const skipped = { noMeta: 0, notEnoughCast: 0, notEnoughPhoto: 0, lowAudi: 0, foreign: 0, excluded: 0 }
 
 for (const [movieCd, list] of Object.entries(cast.castByMovie)) {
+  if (excluded.has(movieCd)) { skipped.excluded++; continue }
+
   const meta = movieMeta.get(movieCd)
   if (!meta) { skipped.noMeta++; continue }
 
@@ -242,7 +256,7 @@ console.log(`\n영화 퀴즈 생성`)
 console.log(`  사진 보유 배우 ${photoByCd.size}명`)
 console.log(`  생성된 퀴즈 ${quizzes.length}편`)
 console.log(`  힌트 ${totalHints}개 (사진 출처: KOBIS peopleCd 직접 조회)`)
-console.log(`  제외: 출연진 부족 ${skipped.notEnoughCast} / 사진 부족 ${skipped.notEnoughPhoto} / 관객수 미달 ${skipped.lowAudi}`)
+console.log(`  제외: 출연진 부족 ${skipped.notEnoughCast} / 사진 부족 ${skipped.notEnoughPhoto} / 관객수 미달 ${skipped.lowAudi} / 검수 제외 ${skipped.excluded}`)
 
 // 후보에 들어간 가장 낮은 비중이 몇 위인지. 8위 내 비중이 많을수록 쉬운 판이 된다.
 const spread = { 8: 0, 12: 0, 20: 0, over: 0 }

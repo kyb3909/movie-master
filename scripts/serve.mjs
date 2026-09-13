@@ -10,7 +10,7 @@
  */
 
 import { createServer } from "node:http"
-import { readFile, stat } from "node:fs/promises"
+import { readFile, writeFile, stat } from "node:fs/promises"
 import { extname, join, normalize } from "node:path"
 
 const flags = {}
@@ -35,10 +35,61 @@ const TYPES = {
   ".svg": "image/svg+xml",
 }
 
+/** 검수 페이지가 저장을 누르면 여기로 보낸다. */
+const OVERRIDES_PATH = "data/quiz-overrides.json"
+
+/**
+ * 검수 결과를 파일로 남긴다.
+ *
+ * 내려받기 방식으로 하면 사용자가 Downloads 에서 파일을 찾아 data/ 로 옮겨야 한다.
+ * 어차피 이 서버는 내 컴퓨터에서만 도는 검수용이므로 바로 쓰는 편이 낫다.
+ */
+async function saveOverrides(req, res) {
+  let body = ""
+  for await (const chunk of req) {
+    body += chunk
+    if (body.length > 2_000_000) { res.writeHead(413).end('{"ok":false}'); return }
+  }
+
+  try {
+    const incoming = JSON.parse(body)
+
+    // 기존 파일의 제목 교정 같은 손으로 넣은 값은 지우지 않는다.
+    let prev = {}
+    try { prev = JSON.parse(await readFile(OVERRIDES_PATH, "utf8")) } catch {}
+
+    const next = {
+      ...prev,
+      updatedAt: new Date().toISOString(),
+      excluded: {
+        quiz: [...new Set(incoming.quiz ?? [])],
+        hollywood: [...new Set(incoming.hollywood ?? [])],
+      },
+    }
+
+    await writeFile(OVERRIDES_PATH, JSON.stringify(next, null, 2) + "\n", "utf8")
+
+    const n = next.excluded.quiz.length + next.excluded.hollywood.length
+    console.log(`  저장됨 — 제외 ${n}편 (한국 ${next.excluded.quiz.length} · 헐리우드 ${next.excluded.hollywood.length})`)
+
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
+    res.end(JSON.stringify({ ok: true, count: n }))
+  } catch (err) {
+    console.error(`  저장 실패: ${err.message}`)
+    res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" })
+    res.end(JSON.stringify({ ok: false, error: err.message }))
+  }
+}
+
 const server = createServer(async (req, res) => {
   // 쿼리스트링을 떼고, 상위 디렉터리 탈출을 막는다.
   const raw = decodeURIComponent(req.url.split("?")[0])
   const rel = normalize(raw === "/" ? INDEX : raw.replace(/^\/+/, ""))
+
+  if (req.method === "POST" && raw === "/api/overrides") {
+    await saveOverrides(req, res)
+    return
+  }
 
   if (rel.startsWith("..")) {
     res.writeHead(403).end("forbidden")

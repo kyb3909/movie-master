@@ -69,6 +69,15 @@ function cleanKoTitle(s) {
   return String(s || "").replace(/\s*\([^()]*\)\s*$/, "").trim()
 }
 
+/**
+ * 로튼은 같은 제목이 여러 편일 때 "Joker (2019)" 처럼 연도를 붙여 준다.
+ * 이걸 그대로 두면 원제를 정확히 아는 사람이 "Joker" 라고 쳤을 때 오답이 된다.
+ * 707편 중 142편(20%)이 여기 해당했다. 화면에 쓰는 이름이자 정답이므로 떼고 쓴다.
+ */
+function cleanEnTitle(s) {
+  return String(s || "").replace(/\s*\((?:19|20)\d{2}\)\s*$/, "").trim()
+}
+
 const isDocumentary = (genres) => (genres || []).some((g) => /document/i.test(g))
 const isAnimation = (genres) => (genres || []).some((g) => /anim/i.test(g))
 
@@ -133,7 +142,7 @@ for (const row of byBomId.values()) {
     gross: row.gross,
     bomAppearances: row.bomAppearances,
 
-    titleEn: r.rtTitle || row.title,
+    titleEn: cleanEnTitle(r.rtTitle || row.title),
     titleKo: cleanKoTitle(k.titleKo),
     titleKoRaw: k.titleKo,
     year: Number(String(r.releaseDate || "").slice(0, 4)) || row.year,

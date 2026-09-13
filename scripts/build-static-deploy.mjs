@@ -34,8 +34,11 @@ const GAMES = [
     desc: "배우 얼굴만 보고 한국 영화를 맞힙니다. 비중이 낮은 배우부터 공개됩니다.",
     tag: "한국 영화",
     countFrom: async () => (JSON.parse(await readFile("data/quizzes.json", "utf8"))).count,
+    // 기본 난이도에도 ?mode= 를 붙인다. 비워 두면 게임 쪽이 '고른 게 없다'고 보고
+    // 지난번에 저장된 난이도를 그대로 쓴다. 한 번 어려움을 해본 사람은 '쉬움' 을
+    // 눌러도 계속 어려움으로 들어갔다.
     entries: [
-      { label: "쉬움", query: "" },
+      { label: "쉬움", query: "?mode=" },
       { label: "어려움", query: "?mode=hard" },
     ],
   },
@@ -48,8 +51,9 @@ const GAMES = [
     countFrom: async () => (JSON.parse(await readFile("data/hollywood-catalog.json", "utf8"))).count,
     // 난이도는 들어가기 전에 고른다. 게임 안에도 같은 버튼이 있어 도중에 바꿀 수 있다.
     entries: [
-      { label: "전체", query: "" },
-      { label: "신선한 영화만", query: "?mode=fresh50" },
+      { label: "전체", query: "?mode=" },
+      // 로튼 지수가 높은 영화끼리만 붙어 점수 차이가 좁아진다. 이름과 달리 더 어렵다.
+      { label: "신선한 영화만 (어려움)", query: "?mode=fresh50" },
     ],
   },
   {

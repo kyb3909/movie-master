@@ -49,10 +49,25 @@ const minGross = Number(flags["min-gross"] ?? 50_000_000)
 
 const catalog = JSON.parse(await readFile(IN_PATH, "utf8"))
 
+/**
+ * 사람이 검수한 결과. 검수 페이지에서 내려받아 덮어쓰는 파일이다.
+ * 자동 수집만으로는 못 거르는 것들이 있다 — 동명의 다른 작품이 붙은 한국어 제목,
+ * 얼굴만으로는 도저히 못 맞히는 영화 같은 것들.
+ */
+let overrides = { excluded: {}, titles: {} }
+try {
+  overrides = JSON.parse(await readFile("data/quiz-overrides.json", "utf8"))
+} catch {
+  // 검수 전이면 파일이 없다. 그대로 진행한다.
+}
+const excluded = new Set(overrides.excluded?.hollywood ?? [])
+const titleFix = overrides.titles?.hollywood ?? {}
+
 const quizzes = []
-const skipped = { notEligible: 0, notEnoughPhoto: 0, noTitle: 0, lowGross: 0 }
+const skipped = { notEligible: 0, notEnoughPhoto: 0, noTitle: 0, lowGross: 0, excluded: 0 }
 
 for (const m of catalog.movies) {
+  if (excluded.has(m.bomId)) { skipped.excluded++; continue }
   // 카탈로그가 이미 판정해 둔 것을 따른다 (사진 있는 배우 5명 이상 · 애니메이션 아님).
   if (!m.quizEligible) { skipped.notEligible++; continue }
   if (!m.titleKo || !m.titleEn) { skipped.noTitle++; continue }
@@ -81,7 +96,7 @@ for (const m of catalog.movies) {
   quizzes.push({
     bomId: m.bomId,
     movieCd: m.movieCd ?? null,
-    title: m.titleKo,
+    title: titleFix[m.bomId] ?? m.titleKo,
     titleEn: m.titleEn,
     releaseDate: m.releaseDate,
     gross: m.gross ?? 0,
@@ -102,7 +117,7 @@ quizzes.sort((a, b) => (b.gross ?? 0) - (a.gross ?? 0))
 console.log(`\n헐리우드 배우 퀴즈 생성`)
 console.log(`  카탈로그 ${catalog.movies.length}편 (그중 quizEligible ${catalog.quizCount ?? "?"}편)`)
 console.log(`  생성된 퀴즈 ${quizzes.length}편 · 힌트 ${quizzes.length * HINT_COUNT}개`)
-console.log(`  제외: quizEligible 아님 ${skipped.notEligible} / 큰 사진 부족 ${skipped.notEnoughPhoto} / 제목 없음 ${skipped.noTitle} / 흥행 미달 ${skipped.lowGross}`)
+console.log(`  제외: quizEligible 아님 ${skipped.notEligible} / 큰 사진 부족 ${skipped.notEnoughPhoto} / 제목 없음 ${skipped.noTitle} / 흥행 미달 ${skipped.lowGross} / 검수 제외 ${skipped.excluded}`)
 
 if (quizzes.length) {
   const q = quizzes[0]

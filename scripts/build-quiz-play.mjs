@@ -529,8 +529,11 @@ var qMode = new URLSearchParams(location.search).get('mode');
 if (qMode !== null) mode = qMode;
 if (mode !== 'hard') mode = '';
 
-/** 이번 난이도로 낼 수 있는 문제들. */
-const HARD_MIN = HINT_COUNT * 2;
+/**
+ * 이번 난이도로 낼 수 있는 문제들.
+ * 어려움은 후보 목록의 7번째까지 쓰므로 후보가 그만큼 있어야 한다.
+ */
+const HARD_MIN = HINT_COUNT + 2;
 function QUIZ_POOL() {
   const idx = [];
   for (let i = 0; i < QUIZZES.length; i++) {
@@ -576,8 +579,12 @@ function saveRecord(rec) {
 /**
  * 난이도 = 후보 목록의 어느 구간을 쓰는가.
  *
- *   쉬움   앞에서 5명  (비중 1~5위 · 주연이 마지막에 나온다)
- *   어려움 그다음 5명  (비중 6~10위 · 주연은 끝까지 안 나온다)
+ *   쉬움   1~5번째  (5번째 배우부터 공개해 주연으로 끝난다)
+ *   어려움 3~7번째  (7번째 배우부터 공개하고 주연 2명은 끝까지 안 나온다)
+ *
+ * 예전 어려움은 6~10번째였다. 그 구간은 주연 근처를 아예 못 보여줘서
+ * 마지막 힌트조차 41%가 주연 경험 없는 배우였고, 너무 어렵다는 말이 나왔다.
+ * 두 칸 당겨 3번째까지 보여주면 마지막 힌트에는 알 만한 얼굴이 온다.
  *
  * 비중 '숫자' 가 아니라 목록의 '자리' 로 자른다. 사진이 없어 빠진 배우 때문에
  * 비중 번호에는 구멍이 있다(6·7·8·9·11 처럼). 자리로 세면 그 구멍과 무관하게
@@ -585,7 +592,7 @@ function saveRecord(rec) {
  *
  * 어느 쪽이든 공개 순서는 '비중 낮은 쪽 → 높은 쪽' 이다. 단서가 점점 세져야 한다.
  */
-const SLICE = { '': [0, HINT_COUNT], hard: [HINT_COUNT, HINT_COUNT * 2] };
+const SLICE = { '': [0, HINT_COUNT], hard: [HINT_COUNT - 3, HINT_COUNT + 2] };
 
 function drawHints(cand) {
   const [from, to] = SLICE[mode] || SLICE[''];
