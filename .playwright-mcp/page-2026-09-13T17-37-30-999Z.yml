@@ -1,0 +1,65 @@
+- generic [ref=f16e2]:
+  - banner [ref=f16e3]:
+    - heading "영화 제목 맞추기 누룽지 극장" [level=1] [ref=f16e4]:
+      - text: 영화 제목 맞추기
+      - generic [ref=f16e5]: 누룽지 극장
+    - generic [ref=f16e7]: 1 / 5판 · 0점
+  - navigation [ref=f16e8]:
+    - link "한국 영화" [ref=f16e9] [cursor=pointer]:
+      - /url: quiz-play.html
+    - link "헐리우드" [ref=f16e10] [cursor=pointer]:
+      - /url: hollywood-quiz-play.html
+    - link "로튼 하이로우" [ref=f16e11] [cursor=pointer]:
+      - /url: highlow-play.html
+  - generic [ref=f16e12]:
+    - generic [ref=f16e13]: 난이도
+    - button "쉬움" [ref=f16e14] [cursor=pointer]
+    - button "어려움" [ref=f16e15] [cursor=pointer]
+    - generic [ref=f16e16]: 423편
+  - generic [ref=f16e17]:
+    - generic [ref=f16e18]: 개봉 연도
+    - paragraph [ref=f16e19]:
+      - text: "2018"
+      - emphasis [ref=f16e20]: 년 개봉
+    - paragraph [ref=f16e21]: 이 배우들이 나온 영화는?
+  - generic [ref=f16e22]: 힌트 1 / 5
+  - generic [ref=f16e26]:
+    - figure "HINT 01 최리" [ref=f16e27]:
+      - generic [ref=f16e29]:
+        - generic [ref=f16e30]: HINT 01
+        - generic [ref=f16e31]: 최리
+    - figure "HINT 02 —" [ref=f16e33]:
+      - generic [ref=f16e34]: "02"
+      - generic [ref=f16e36]:
+        - generic [ref=f16e37]: HINT 02
+        - generic [ref=f16e38]: —
+    - figure "HINT 03 —" [ref=f16e40]:
+      - generic [ref=f16e41]: "03"
+      - generic [ref=f16e43]:
+        - generic [ref=f16e44]: HINT 03
+        - generic [ref=f16e45]: —
+    - figure "HINT 04 —" [ref=f16e47]:
+      - generic [ref=f16e48]: "04"
+      - generic [ref=f16e50]:
+        - generic [ref=f16e51]: HINT 04
+        - generic [ref=f16e52]: —
+    - figure "HINT 05 —" [ref=f16e54]:
+      - generic [ref=f16e55]: "05"
+      - generic [ref=f16e57]:
+        - generic [ref=f16e58]: HINT 05
+        - generic [ref=f16e59]: —
+  - generic [ref=f16e61]:
+    - textbox "영화 제목을 입력하세요" [active] [ref=f16e62]
+    - button "확인" [ref=f16e63] [cursor=pointer]
+    - button "포기" [ref=f16e64] [cursor=pointer]
+  - paragraph [ref=f16e65]
+  - generic [ref=f16e66]:
+    - generic [ref=f16e67]:
+      - generic [ref=f16e68]: 랭킹
+      - generic [ref=f16e69]: 이 브라우저 기록입니다
+    - list [ref=f16e70]:
+      - listitem [ref=f16e71]:
+        - generic [ref=f16e72]: "1"
+        - generic [ref=f16e73]: 나
+        - generic [ref=f16e74]: 250점
+  - contentinfo [ref=f16e75]: 비중이 낮은 배우부터 공개됩니다. 힌트를 적게 볼수록 점수가 높습니다. 5판을 풀면 점수가 이 브라우저에 기록됩니다.

@@ -24,19 +24,21 @@ import { dirname } from "node:path"
 
 const OUT_PATH = "data/review.html"
 
-/** 이 번호보다 뒤에서 첫 힌트가 시작하면 주의 표시를 단다. */
-const RISK_BILLING = 10
-
-/** 쉬움 난이도가 쓰는 구간. build-quiz-play.mjs 의 SLICE 와 같아야 한다. */
-const HINT_COUNT = 5
+/**
+ * 쉬움 난이도가 쓰는 비중 구간과 최소 힌트 수.
+ * build-quiz-play.mjs 의 RANGE·MIN_HINTS 와 같아야 한다.
+ */
+const EASY_RANGE = [1, 5]
+const MIN_HINTS = 3
 
 const read = async (p) => JSON.parse(await readFile(p, "utf8"))
 
-/** 쉬움 난이도에서 실제로 공개되는 순서. 앞에서 5명을 뽑아 뒤집는다. */
+/** 쉬움 난이도에서 실제로 공개되는 순서 (비중 5위 → 1위). */
 function easyHints(candidates) {
-  const part = candidates.slice(0, HINT_COUNT)
-  const five = part.length >= HINT_COUNT ? part : candidates.slice(-HINT_COUNT)
-  return five.slice().reverse()
+  return candidates
+    .filter((c) => c.billing >= EASY_RANGE[0] && c.billing <= EASY_RANGE[1])
+    .slice()
+    .reverse()
 }
 
 // ============================================
@@ -56,8 +58,9 @@ const nf = new Intl.NumberFormat("ko-KR")
 
 function row(id, title, sub, stat, posterUrl, candidates) {
   const hints = easyHints(candidates)
-  const first = hints[0]
-  const risk = (first?.billing ?? 99) > RISK_BILLING
+
+  // 힌트가 최소 개수에 못 미치면 게임에 아예 안 나온다. 검수 목록에서도 뺀다.
+  if (hints.length < MIN_HINTS) return null
 
   return {
     id,
@@ -65,36 +68,41 @@ function row(id, title, sub, stat, posterUrl, candidates) {
     sub,
     stat,
     poster: posterUrl || "",
-    risk,
-    firstBilling: first?.billing ?? 99,
+    // 단서가 세 장뿐인 판은 맞히기 어려울 수 있다. 먼저 눈으로 확인할 대상이다.
+    risk: hints.length <= MIN_HINTS,
+    hintCount: hints.length,
     cast: hints.map((h) => ({ n: h.name, i: h.imageUrl, b: h.billing })),
   }
 }
 
-const KR = kq.quizzes.map((q) =>
-  row(
-    q.movieCd,
-    q.title,
-    q.releaseDate?.slice(0, 4) ?? "",
-    `관객 ${nf.format(q.audiAcc ?? 0)}명`,
-    posters.byMovieCd?.[q.movieCd]?.posters?.[0]?.thumb ?? "",
-    q.candidates
+const KR = kq.quizzes
+  .map((q) =>
+    row(
+      q.movieCd,
+      q.title,
+      q.releaseDate?.slice(0, 4) ?? "",
+      `관객 ${nf.format(q.audiAcc ?? 0)}명`,
+      posters.byMovieCd?.[q.movieCd]?.posters?.[0]?.thumb ?? "",
+      q.candidates
+    )
   )
-)
+  .filter(Boolean)
 
-const HW = hq.quizzes.map((q) =>
-  row(
-    q.bomId,
-    q.title,
-    `${q.titleEn} · ${q.releaseDate?.slice(0, 4) ?? ""}`,
-    `북미 $${nf.format(Math.round((q.gross ?? 0) / 1e6))}M · 로튼 ${q.tomatometer ?? "?"}%`,
-    posterByBomId.get(q.bomId) ?? "",
-    q.candidates
+const HW = hq.quizzes
+  .map((q) =>
+    row(
+      q.bomId,
+      q.title,
+      `${q.titleEn} · ${q.releaseDate?.slice(0, 4) ?? ""}`,
+      `북미 $${nf.format(Math.round((q.gross ?? 0) / 1e6))}M · 로튼 ${q.tomatometer ?? "?"}%`,
+      posterByBomId.get(q.bomId) ?? "",
+      q.candidates
+    )
   )
-)
+  .filter(Boolean)
 
-// 위험한 것을 위로 올린다. 검수는 시간이 한정되므로 의심스러운 것부터 보게 한다.
-const byRisk = (a, b) => b.firstBilling - a.firstBilling
+// 단서가 적은 판을 위로 올린다. 검수 시간은 한정돼 있으니 의심스러운 것부터 보게 한다.
+const byRisk = (a, b) => a.hintCount - b.hintCount
 KR.sort(byRisk)
 HW.sort(byRisk)
 
@@ -207,8 +215,9 @@ const html = `<!doctype html>
 
 <header>
   <h1>출제 목록 검수</h1>
-  <p class="lede">얼굴 다섯 장만 보고 이 영화를 맞힐 수 있을지 판단해 주세요. <b>왼쪽이 첫 힌트</b>이고 오른쪽으로 갈수록 쉬워집니다.
-  첫 힌트가 비중 ${RISK_BILLING}위보다 뒤인 영화에는 <span class="warn" style="margin:0">주의</span>를 달아 위로 올려 두었습니다.</p>
+  <p class="lede">이 얼굴들만 보고 영화를 맞힐 수 있을지 판단해 주세요. <b>왼쪽이 첫 힌트</b>이고 오른쪽으로 갈수록 쉬워집니다.
+  힌트는 비중 ${EASY_RANGE[0]}~${EASY_RANGE[1]}위 배우만 씁니다. 사진이 없는 배우가 있으면 그만큼 힌트가 줄어드는데,
+  단서가 ${MIN_HINTS}장뿐인 영화에는 <span class="warn" style="margin:0">주의</span>를 달아 위로 올려 두었습니다.</p>
 </header>
 
 <div class="bar">
@@ -250,7 +259,7 @@ function card(m) {
     (m.poster ? '<img class="pos" src="' + esc(m.poster) + '" alt="" loading="lazy" onerror="this.style.visibility=\\'hidden\\'">'
               : '<div class="pos"></div>') +
     '<div class="body">' +
-      (m.risk ? '<span class="warn">주의 · 첫 힌트가 비중 ' + m.firstBilling + '위</span>' : '') +
+      (m.risk ? '<span class="warn">주의 · 단서가 ' + m.hintCount + '장뿐</span>' : '') +
       '<h3>' + esc(m.title) + '</h3>' +
       '<p class="sub">' + esc(m.sub) + '</p>' +
       '<p class="stat">' + esc(m.stat) + '</p>' +
@@ -355,8 +364,8 @@ await writeFile(OUT_PATH, html, "utf8")
 const risky = (a) => a.filter((m) => m.risk).length
 
 console.log(`\n검수 페이지 생성`)
-console.log(`  한국 영화  ${KR.length}편 (첫 힌트가 비중 ${RISK_BILLING}위보다 뒤: ${risky(KR)}편)`)
-console.log(`  헐리우드   ${HW.length}편 (첫 힌트가 비중 ${RISK_BILLING}위보다 뒤: ${risky(HW)}편)`)
+console.log(`  한국 영화  ${KR.length}편 (단서가 ${MIN_HINTS}장뿐: ${risky(KR)}편)`)
+console.log(`  헐리우드   ${HW.length}편 (단서가 ${MIN_HINTS}장뿐: ${risky(HW)}편)`)
 console.log(`  이미 뺀 영화 ${(overrides.excluded?.quiz ?? []).length + (overrides.excluded?.hollywood ?? []).length}편`)
 console.log(`  저장: ${OUT_PATH}`)
 console.log(`\n  열기:  node scripts/serve.mjs  →  http://localhost:8899/review.html\n`)

@@ -530,20 +530,62 @@ if (qMode !== null) mode = qMode;
 if (mode !== 'hard') mode = '';
 
 /**
- * 이번 난이도로 낼 수 있는 문제들.
- * 어려움은 후보 목록의 7번째까지 쓰므로 후보가 그만큼 있어야 한다.
+ * 난이도 = 비중 몇 위까지를 힌트로 쓰는가.
+ *
+ *   쉬움   비중 1~5위  (5위부터 공개해 주연으로 끝난다)
+ *   어려움 비중 3~7위  (7위부터 공개하고 주연 2명은 끝까지 안 나온다)
+ *
+ * --- 왜 '자리' 가 아니라 '비중 숫자' 로 자르나 ---
+ * 예전에는 후보 목록의 앞에서 5명을 잘랐다. 그런데 후보 목록에는 사진이 있는
+ * 배우만 남아 있어서, 비중 1~4위에 사진이 없으면 5번째 자리가 비중 26위나
+ * 49위가 된다. 공작의 첫 힌트가 비중 49위(김소진)였던 게 그 탓이다.
+ * 아무도 모르는 얼굴로 시작하니 맞힐 수가 없다는 반응이 나왔다.
+ *
+ * 그래서 자리가 아니라 비중 숫자로 자른다. 대신 다섯 명이 안 채워지는 영화가
+ * 생기므로 힌트 개수를 3~5개로 유동적으로 둔다.
+ *
+ * 개수를 고정하고 5명을 채우게 하면 파묘·부산행·택시운전사처럼 비중 5위 안에
+ * 사진이 3~4명뿐인 대표작이 통째로 빠진다(442편 → 243편). 개수를 풀면 423편이
+ * 남고, 힌트가 적은 판은 대신 전부 주연급이라 오히려 맞히기 쉽다.
+ *
+ * 공개 순서는 언제나 '비중 낮은 쪽 → 높은 쪽' 이다. 단서가 점점 세져야 한다.
  */
-const HARD_MIN = HINT_COUNT + 2;
+const RANGE = { '': [1, 5], hard: [3, 7] };
+
+/** 힌트가 이보다 적으면 게임이 성립하지 않는다. */
+const MIN_HINTS = 3;
+
+/** 그 난이도에서 쓸 수 있는 배우들. 비중 높은 쪽(숫자 큰 쪽)이 먼저 공개된다. */
+function hintsFor(cand, m) {
+  const r = RANGE[m] || RANGE[''];
+  return cand.filter(c => c.b >= r[0] && c.b <= r[1]).slice().reverse();
+}
+
+/**
+ * 어려움을 낼 수 있는 영화인가.
+ *
+ * 힌트 수만 보면 안 된다. 헐리우드는 배우가 비중 5위까지만 있어서 어려움을
+ * 골라도 쉬움의 앞 세 장과 똑같아진다. 쉬움보다 깊은 얼굴(비중 6위 이상)이
+ * 실제로 있어야 다른 난이도라고 할 수 있다.
+ */
+function hardOK(q) {
+  return hintsFor(q.c, 'hard').length >= MIN_HINTS
+    && q.c.some(c => c.b > RANGE[''][1]);
+}
+
+/** 이번 난이도로 낼 수 있는 문제들. */
 function QUIZ_POOL() {
   const idx = [];
   for (let i = 0; i < QUIZZES.length; i++) {
-    if (mode !== 'hard' || QUIZZES[i].c.length >= HARD_MIN) idx.push(i);
+    const q = QUIZZES[i];
+    const ok = mode === 'hard' ? hardOK(q) : hintsFor(q.c, '').length >= MIN_HINTS;
+    if (ok) idx.push(i);
   }
   return idx;
 }
 
 /** 어려움을 낼 수 있는 영화가 없으면 난이도 선택 자체를 보여주지 않는다. */
-const HARD_COUNT = QUIZZES.filter(q => q.c.length >= HARD_MIN).length;
+const HARD_COUNT = QUIZZES.filter(hardOK).length;
 if (!HARD_COUNT) mode = '';
 
 /**
@@ -576,30 +618,8 @@ function saveRecord(rec) {
  *   - 나머지는 무작위로 뽑아 비중이 낮은 순으로 늘어놓는다.
  * 결과적으로 '조연 → 주연' 흐름은 유지되면서 조합만 바뀐다.
  */
-/**
- * 난이도 = 후보 목록의 어느 구간을 쓰는가.
- *
- *   쉬움   1~5번째  (5번째 배우부터 공개해 주연으로 끝난다)
- *   어려움 3~7번째  (7번째 배우부터 공개하고 주연 2명은 끝까지 안 나온다)
- *
- * 예전 어려움은 6~10번째였다. 그 구간은 주연 근처를 아예 못 보여줘서
- * 마지막 힌트조차 41%가 주연 경험 없는 배우였고, 너무 어렵다는 말이 나왔다.
- * 두 칸 당겨 3번째까지 보여주면 마지막 힌트에는 알 만한 얼굴이 온다.
- *
- * 비중 '숫자' 가 아니라 목록의 '자리' 로 자른다. 사진이 없어 빠진 배우 때문에
- * 비중 번호에는 구멍이 있다(6·7·8·9·11 처럼). 자리로 세면 그 구멍과 무관하게
- * 언제나 5명이 채워진다.
- *
- * 어느 쪽이든 공개 순서는 '비중 낮은 쪽 → 높은 쪽' 이다. 단서가 점점 세져야 한다.
- */
-const SLICE = { '': [0, HINT_COUNT], hard: [HINT_COUNT - 3, HINT_COUNT + 2] };
-
 function drawHints(cand) {
-  const [from, to] = SLICE[mode] || SLICE[''];
-  const part = cand.slice(from, to);
-  // 어려움 구간이 모자라면(후보가 적은 영화) 뒤에서부터 5명을 끌어온다.
-  const five = part.length >= HINT_COUNT ? part : cand.slice(-HINT_COUNT);
-  return five.slice().reverse();
+  return hintsFor(cand, mode);
 }
 
 function pick() {
@@ -648,8 +668,14 @@ function reveal() {
   $('steps').textContent = '힌트 ' + shown + ' / ' + hints.length;
 }
 
-/** 힌트를 적게 쓸수록 높은 점수. 1개면 만점, 다 쓰면 10점. */
-const points = used => (hints.length + 1 - used) * 10;
+/**
+ * 힌트를 적게 쓸수록 높은 점수. 1개면 50점, 5개면 10점.
+ *
+ * '남은 힌트' 가 아니라 '쓴 힌트' 로 센다. 영화마다 힌트가 3~5개로 달라서,
+ * 남은 개수로 매기면 힌트가 3개뿐인 영화는 첫 판에 맞혀도 30점밖에 안 된다.
+ * 같은 실력에 같은 점수를 주려면 쓴 개수를 봐야 한다.
+ */
+const points = used => Math.max(10, (HINT_COUNT + 1 - used) * 10);
 
 function finish(win) {
   // 한 판은 한 번만 정산한다. 힌트를 다 쓴 뒤 답이 한 번 더 들어오면
