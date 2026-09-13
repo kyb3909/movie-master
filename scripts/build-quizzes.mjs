@@ -83,9 +83,11 @@ const box = JSON.parse(await readFile("data/kobis-boxoffice.json", "utf8"))
  * (부분 순위라 등수가 올라갈 뿐이다) 이 교집합은 정확하다.
  */
 let koreanOnly = null
+let krMovies = []
 try {
   const kr = JSON.parse(await readFile("data/kobis-boxoffice-kr.json", "utf8"))
   koreanOnly = new Set(kr.movies.map((m) => m.movieCd))
+  krMovies = kr.movies
 } catch {
   console.warn("경고: data/kobis-boxoffice-kr.json 이 없어 외화를 걸러내지 못합니다.")
   console.warn("      node scripts/fetch-kobis-boxoffice.mjs --nation=K --out=data/kobis-boxoffice-kr.json\n")
@@ -127,8 +129,11 @@ try {
 }
 
 // 영화 메타 (같은 영화가 두 해에 오르면 관객수가 큰 쪽)
+// 전체 순위(box)뿐 아니라 한국영화 순위(krMovies)도 넣는다.
+// 전체 순위에는 못 들었지만 한국영화 순위에는 든 작품(장산범·악녀 등)이
+// 여기서 빠지면 출연진을 받아 두고도 퀴즈로 만들지 못한다.
 const movieMeta = new Map()
-for (const m of box.movies) {
+for (const m of [...box.movies, ...krMovies]) {
   const prev = movieMeta.get(m.movieCd)
   if (!prev || (m.audiAcc ?? 0) > (prev.audiAcc ?? 0)) movieMeta.set(m.movieCd, m)
 }

@@ -6,6 +6,7 @@
  * 실행:
  *   node scripts/fetch-kobis-cast.mjs
  *   node scripts/fetch-kobis-cast.mjs --limit=50      # 앞의 50편만 (시험용)
+ *   node scripts/fetch-kobis-cast.mjs --in=data/kobis-boxoffice-kr.json  # 다른 목록 기준
  *
  * 중단해도 안전하다. 이미 받은 영화는 건너뛰고 이어서 받는다.
  *
@@ -96,7 +97,7 @@ for (const arg of process.argv.slice(2)) {
   if (m) flags[m[1]] = m[2] === "" ? true : m[2]
 }
 
-const boxoffice = JSON.parse(await readFile(IN_PATH, "utf8"))
+const boxoffice = JSON.parse(await readFile(flags.in ?? IN_PATH, "utf8"))
 
 // movieCd 기준 고유 영화 목록 (같은 영화가 두 해에 오를 수 있다)
 const movies = [...new Map(boxoffice.movies.map((m) => [m.movieCd, m])).values()]

@@ -6,6 +6,7 @@
  * 실행:
  *   node scripts/fetch-kobis-posters.mjs
  *   node scripts/fetch-kobis-posters.mjs --limit=20
+ *   node scripts/fetch-kobis-posters.mjs --in=data/kobis-boxoffice-kr.json
  *
  * 중단해도 안전하다. 이미 받은 영화는 건너뛴다.
  *
@@ -84,7 +85,7 @@ async function fetchPosters(movieCd) {
 
 // ============================================
 
-const boxoffice = JSON.parse(await readFile(IN_PATH, "utf8"))
+const boxoffice = JSON.parse(await readFile(flags.in ?? IN_PATH, "utf8"))
 const movies = [...new Map(boxoffice.movies.map((m) => [m.movieCd, m])).values()]
 const targets = flags.limit ? movies.slice(0, Number(flags.limit)) : movies
 
