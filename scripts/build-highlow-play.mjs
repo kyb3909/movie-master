@@ -156,12 +156,14 @@ for (const row of rows) {
   const directors = (row.directorsKo?.length ? row.directorsKo : row.directors) ?? []
 
   // 페이지에 실을 것은 제목·연도·감독·포스터·지수뿐이다.
+  // k 는 한국 관객 수. 출제 범위를 한국에서 본 영화로 좁힐 때만 쓴다.
   movies.push({
     t: title,
     y: Number.isFinite(year) ? year : "",
     d: directors.slice(0, 2).join(", "),
     p: shrinkPoster(row.posterUrl),
     s: Math.round(score),
+    k: row.krAudi ?? null,
   })
 }
 
@@ -405,9 +407,9 @@ ${rankCSS}
 ${navHTML("highlow")}
 
   <div class="modes" id="modes">
-    <span class="lab">난이도</span>
-    <button data-mode="" class="on">전체</button>
-    <button data-mode="fresh50">신선한 영화만</button>
+    <span class="lab">범위</span>
+    <button data-mode="" class="on">한국 개봉작</button>
+    <button data-mode="all">전체</button>
     <span class="cnt" id="modeCnt"></span>
   </div>
 
@@ -427,8 +429,8 @@ ${navHTML("highlow")}
 
 ${rankHTML("랭킹")}
 
-  <footer class="foot">로튼토마토 신선도(Tomatometer) 기준입니다. 동점은 정답으로 처리됩니다.
-    '신선한 영화만' 은 지수 50 이상인 작품끼리 겨룹니다.</footer>
+  <footer class="foot">로튼토마토 신선도(Tomatometer) 기준입니다. 점수가 같으면 맞은 것으로 칩니다.
+    한국 개봉작은 국내에서 30만 명 이상이 본 외국영화입니다.</footer>
 </div>
 
 <script>
@@ -437,19 +439,24 @@ const BEST_KEY = 'noorung.highlow.best';
 const MODE_KEY = 'noorung.highlow.mode';
 
 /**
- * 난이도 = 출제 대상 좁히기.
+ * 출제 범위.
  *
- * 하한 없이 내면 지수 한 자리대의 졸작이 절반씩 섞여 나온다. 아무도 모르는 영화라
- * 찍는 것 말고 할 수 있는 게 없다. 'fresh50' 은 지수 50 이상만 남긴다.
- * (로튼이 Fresh 로 치는 공식 경계는 60 이다. 더 좁히려면 이 값을 60 으로 올린다)
+ * 기본은 '한국 개봉작' 이다. 북미 흥행만 보고 1,637편을 다 내면 한국에서 본 적
+ * 없는 영화가 절반 넘게 섞인다. 제목도 포스터도 낯선 두 편을 놓고 지수를 고르라면
+ * 동전 던지기가 된다. KOBIS 외국영화 연간 50위에 든 적이 있는 영화만 남긴다.
  *
- * 다만 쉬워지지는 않는다. 50~100 안에서 겨루면 두 지수가 붙어 오히려 가르기 어렵다.
- * 아는 영화로 고민하게 만드는 것이 목적이지, 정답률을 올리는 것이 목적이 아니다.
+ * '전체' 는 예전 그대로다. 한국에 안 걸린 영화까지 나온다.
+ *
+ * 예전에 있던 '신선한 영화만'(지수 50 이상)은 뺐다. 이름과 달리 더 어려웠다.
+ * 지수가 높은 영화끼리 붙으면 두 값이 가까워져 가르기 어렵기 때문이다.
+ * 실제로 두 영화의 지수 차이 평균이 30.4점에서 15.8점으로 반토막 났고,
+ * 사실상 찍어야 하는 문제(차이 5점 이하)가 12%에서 22%로 늘었다.
  */
-const FRESH_MIN = 50;
+/** 한국 관객 수 하한. 연간 50위 꼬리는 10만 명대라 제목도 낯설다. */
+const MIN_KR = 300000;
 const POOLS = {
-  '': ALL_MOVIES,
-  fresh50: ALL_MOVIES.filter(function (m) { return m.s >= FRESH_MIN; }),
+  '': ALL_MOVIES.filter(function (m) { return m.k != null && m.k >= MIN_KR; }),
+  all: ALL_MOVIES,
 };
 
 const $ = id => document.getElementById(id);
@@ -519,11 +526,11 @@ const CHOICE =
 
 let left, right, streak = 0, best = 0, round = 1, locked = false;
 
-/** 난이도마다 출제 목록이 다르니 최고 기록도 따로 센다. 섞으면 어느 쪽 기록인지 알 수 없다. */
+/** 범위마다 출제 목록이 다르니 최고 기록도 따로 센다. 섞으면 어느 쪽 기록인지 알 수 없다. */
 let mode = '';
 try { mode = localStorage.getItem(MODE_KEY) || ''; } catch (e) {}
 
-// 랜딩에서 난이도를 골라 들어온 경우(/highlow?mode=fresh50)가 지난 선택보다 우선한다.
+// 랜딩에서 범위를 골라 들어온 경우(/highlow?mode=all)가 지난 선택보다 우선한다.
 var qMode = new URLSearchParams(location.search).get('mode');
 if (qMode !== null) mode = qMode;
 

@@ -622,8 +622,23 @@ function drawHints(cand) {
   return hintsFor(cand, mode);
 }
 
+/**
+ * 고르게 섞는다 (Fisher-Yates).
+ *
+ * 예전에는 sort(() => Math.random() - 0.5) 를 썼는데 이건 고르게 섞이지 않는다.
+ * 문제 목록이 흥행 내림차순이라 편향이 인지도와 맞물렸다. 20만 회 돌려 보니
+ * 천만 영화가 관객 100만 영화보다 1.9배 덜 나왔다. 퀴즈에서 정확히 반대 방향이다.
+ */
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
 function pick() {
-  if (!pool.length) pool = QUIZ_POOL().sort(() => Math.random() - 0.5);
+  if (!pool.length) pool = shuffle(QUIZ_POOL());
   cur = QUIZZES[pool.pop()];
   hints = drawHints(cur.c);
   shown = 0;

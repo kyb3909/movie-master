@@ -42,6 +42,31 @@ const [bom, rt, kobis] = await Promise.all([
 ])
 
 /**
+ * 한국 관객 수. KOBIS 연도별 '외국영화' 순위(nation=F)에서 가져온다.
+ *
+ * 북미 흥행만으로는 한국 사람이 아는 영화인지 알 수 없다. 행오버·레고 무비처럼
+ * 북미에서 2억 달러를 번 영화가 한국에서는 조용히 지나가기도 하고, 반대로
+ * 한국에서만 크게 터지는 영화도 있다.
+ *
+ * 전체 순위(nation 없음)로는 한국영화가 목록을 채워 외화가 368편만 걸렸다.
+ * 외국영화만 따로 받으면 695편이 걸린다.
+ *
+ * 연간 50위까지만 제공하므로 여기 없다고 한국 미개봉인 것은 아니다.
+ * '한국에서 크게 흥행했다' 의 근거로만 쓰고, 없는 것은 판단을 보류한다.
+ */
+let krAudiOf = new Map()
+try {
+  const f = JSON.parse(await readFile("data/kobis-boxoffice-f.json", "utf8"))
+  for (const m of f.movies) {
+    // 같은 영화가 두 해에 오르면 누적이 큰 쪽을 쓴다
+    if ((m.audiAcc ?? 0) > (krAudiOf.get(m.movieCd) ?? 0)) krAudiOf.set(m.movieCd, m.audiAcc ?? 0)
+  }
+} catch {
+  console.warn("경고: data/kobis-boxoffice-f.json 이 없어 한국 관객 수를 붙이지 못합니다.")
+  console.warn("      node scripts/fetch-kobis-boxoffice.mjs --nation=F --out=data/kobis-boxoffice-f.json\n")
+}
+
+/**
  * BOM 은 2,000행이지만 고유 작품은 1,864편이다.
  * 연말 개봉작이 이듬해 목록에도 올라 136편이 두 번 등재된다.
  * 대표는 순위가 높은(숫자가 작은) 해로 잡고, 나머지 등재 이력은 보존한다.
@@ -143,6 +168,8 @@ for (const row of byBomId.values()) {
     bomAppearances: row.bomAppearances,
 
     titleEn: cleanEnTitle(r.rtTitle || row.title),
+    // 한국 관객 수. 순위 밖이면 null 이고, 0 과는 뜻이 다르다(모른다는 뜻이다).
+    krAudi: krAudiOf.get(k.movieCd) ?? null,
     titleKo: cleanKoTitle(k.titleKo),
     titleKoRaw: k.titleKo,
     year: Number(String(r.releaseDate || "").slice(0, 4)) || row.year,

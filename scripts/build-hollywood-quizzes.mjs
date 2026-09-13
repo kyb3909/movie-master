@@ -45,6 +45,29 @@ for (const arg of process.argv.slice(2)) {
  */
 const minGross = Number(flags["min-gross"] ?? 50_000_000)
 
+/**
+ * 한국에서 흥행한 영화만 낼 것인가. 기본으로 켠다.
+ *
+ * 북미 흥행 하한만으로는 한국 사람이 아는 영화인지 가릴 수 없다. 행오버·레고 무비는
+ * 북미에서 2억 달러 넘게 벌었지만 한국에서는 조용히 지나갔다. 반대로 한국에서만
+ * 크게 터진 영화도 있다. 얼굴 다섯 장을 다 봐도 제목을 떠올릴 수 없으면 게임이 아니다.
+ *
+ * KOBIS 외국영화 연간 50위에 든 적이 있으면 '한국에서 봤다' 로 본다.
+ * 그 해 한국에 걸린 외화 중 50위 안이면 극장에서 실제로 돌아간 작품이다.
+ *
+ * --all 로 끄면 예전처럼 북미 흥행만 본다.
+ */
+const krOnly = !flags.all
+
+/**
+ * 한국 관객 수 하한. 기본 30만 명.
+ *
+ * 연간 50위 안에 들었어도 꼬리 쪽은 10만 명대다. 엘비스(10만)·스마일(11만) 정도인데,
+ * 제목은 들어봤을지 몰라도 배우 얼굴로 떠올리기는 어렵다.
+ * 30만으로 끊으면 402편에서 382편으로 20편만 줄면서 그 꼬리가 정리된다.
+ */
+const minKrAudi = Number(flags["min-kr"] ?? 300_000)
+
 // ============================================
 
 const catalog = JSON.parse(await readFile(IN_PATH, "utf8"))
@@ -64,13 +87,14 @@ const excluded = new Set(overrides.excluded?.hollywood ?? [])
 const titleFix = overrides.titles?.hollywood ?? {}
 
 const quizzes = []
-const skipped = { notEligible: 0, notEnoughPhoto: 0, noTitle: 0, lowGross: 0, excluded: 0 }
+const skipped = { notEligible: 0, notEnoughPhoto: 0, noTitle: 0, lowGross: 0, excluded: 0, notInKorea: 0 }
 
 for (const m of catalog.movies) {
   if (excluded.has(m.bomId)) { skipped.excluded++; continue }
   // 카탈로그가 이미 판정해 둔 것을 따른다 (사진 있는 배우 5명 이상 · 애니메이션 아님).
   if (!m.quizEligible) { skipped.notEligible++; continue }
   if (!m.titleKo || !m.titleEn) { skipped.noTitle++; continue }
+  if (krOnly && (m.krAudi ?? 0) < minKrAudi) { skipped.notInKorea++; continue }
   if ((m.gross ?? 0) < minGross) { skipped.lowGross++; continue }
 
   // quizEligible 은 100x120 기준이라 큰 사진이 없는 배우가 섞여 있을 수 있다.
@@ -100,6 +124,7 @@ for (const m of catalog.movies) {
     titleEn: m.titleEn,
     releaseDate: m.releaseDate,
     gross: m.gross ?? 0,
+    krAudi: m.krAudi ?? null,
     tomatometer: m.tomatometer ?? null,
     audienceScore: m.audienceScore ?? null,
     boxYear: m.bomYear,
@@ -109,15 +134,16 @@ for (const m of catalog.movies) {
   })
 }
 
-// 흥행 내림차순 = 대중 인지도 순. 유명한 영화가 앞에 오게 한다.
-quizzes.sort((a, b) => (b.gross ?? 0) - (a.gross ?? 0))
+// 한국 관객 수 내림차순. 우리 사용자에게 인지도는 북미 흥행이 아니라 이쪽이다.
+// 한국 기록이 없으면(--all 로 켰을 때) 북미 흥행으로 줄을 세운다.
+quizzes.sort((a, b) => (b.krAudi ?? 0) - (a.krAudi ?? 0) || (b.gross ?? 0) - (a.gross ?? 0))
 
 // ============================================
 
 console.log(`\n헐리우드 배우 퀴즈 생성`)
 console.log(`  카탈로그 ${catalog.movies.length}편 (그중 quizEligible ${catalog.quizCount ?? "?"}편)`)
 console.log(`  생성된 퀴즈 ${quizzes.length}편 · 힌트 ${quizzes.length * HINT_COUNT}개`)
-console.log(`  제외: quizEligible 아님 ${skipped.notEligible} / 큰 사진 부족 ${skipped.notEnoughPhoto} / 제목 없음 ${skipped.noTitle} / 흥행 미달 ${skipped.lowGross} / 검수 제외 ${skipped.excluded}`)
+console.log(`  제외: quizEligible 아님 ${skipped.notEligible} / 큰 사진 부족 ${skipped.notEnoughPhoto} / 제목 없음 ${skipped.noTitle} / 흥행 미달 ${skipped.lowGross} / 검수 제외 ${skipped.excluded} / 한국 흥행 없음 ${skipped.notInKorea}`)
 
 if (quizzes.length) {
   const q = quizzes[0]

@@ -62,12 +62,27 @@ const GAMES = [
     name: "로튼 하이로우",
     desc: "두 영화의 로튼토마토 지수를 비교합니다. 몇 번 연속으로 맞힐 수 있는지 겨룹니다.",
     tag: "헐리우드",
-    countFrom: async () => (JSON.parse(await readFile("data/hollywood-catalog.json", "utf8"))).count,
-    // 난이도는 들어가기 전에 고른다. 게임 안에도 같은 버튼이 있어 도중에 바꿀 수 있다.
+    // 기본 범위(한국 개봉작)의 편수를 적는다. 카탈로그 전체를 적으면 들어가서 보는
+    // 숫자와 어긋난다.
+    // 게임 안에 찍히는 숫자와 같아야 한다. build-highlow-play.mjs 가 같은 영화를
+    // rtUrl/bomId 로 한 번 걸러내므로 여기서도 같게 센다. 안 그러면 랜딩과 게임의
+    // 편수가 몇 편씩 어긋난다.
+    countFrom: async () => {
+      const c = JSON.parse(await readFile("data/hollywood-catalog.json", "utf8"))
+      const seen = new Set()
+      return c.movies.filter((m) => {
+        if (m.tomatometer == null || !m.posterUrl) return false
+        if ((m.krAudi ?? 0) < 300_000) return false
+        const key = m.rtUrl || m.bomId || m.titleEn
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      }).length
+    },
+    // 범위는 들어가기 전에 고른다. 게임 안에도 같은 버튼이 있어 도중에 바꿀 수 있다.
     entries: [
-      { label: "전체", query: "?mode=" },
-      // 로튼 지수가 높은 영화끼리만 붙어 점수 차이가 좁아진다. 이름과 달리 더 어렵다.
-      { label: "신선한 영화만 (어려움)", query: "?mode=fresh50" },
+      { label: "한국 개봉작", query: "?mode=" },
+      { label: "전체", query: "?mode=all" },
     ],
   },
   {
@@ -177,7 +192,7 @@ const index = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>누룽지 극장</title>
-<meta name="description" content="영화 퀴즈 세 가지. 배우 얼굴로 제목 맞히기, 로튼토마토 지수 하이로우.">
+<meta name="description" content="영화 퀴즈 네 가지. 배우 얼굴로 제목 맞히기, 배우 격자 채우기, 로튼토마토 지수 하이로우.">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
