@@ -15,6 +15,7 @@
 export const NAV_ITEMS = [
   { slug: "quiz", local: "quiz-play.html", name: "한국 영화" },
   { slug: "hollywood", local: "hollywood-quiz-play.html", name: "헐리우드" },
+  { slug: "grid", local: "grid-play.html", name: "배우 격자" },
   { slug: "highlow", local: "highlow-play.html", name: "로튼 하이로우" },
 ]
 

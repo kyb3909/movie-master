@@ -43,6 +43,20 @@ const GAMES = [
     ],
   },
   {
+    slug: "grid",
+    src: "data/grid-play.html",
+    name: "배우 격자",
+    desc: "가로·세로의 두 배우가 함께 나온 영화로 아홉 칸을 채웁니다. 같은 영화는 한 번만 쓸 수 있습니다.",
+    tag: "한국 영화",
+    // 이쪽은 영화가 아니라 격자 문제의 수다. "편" 으로 찍으면 말이 어긋난다.
+    unit: "문제",
+    countFrom: async () => (JSON.parse(await readFile("data/grid-puzzles.json", "utf8"))).count,
+    entries: [
+      { label: "쉬움 · 12번", query: "?mode=easy" },
+      { label: "어려움 · 9번", query: "?mode=hard" },
+    ],
+  },
+  {
     slug: "highlow",
     src: "data/highlow-play.html",
     name: "로튼 하이로우",
@@ -132,7 +146,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const cards = shipped
   .map((g) => {
     const meta = `        <p>${esc(g.desc)}</p>
-        <span class="count">${g.count != null ? `${g.count.toLocaleString()}편 수록` : "&nbsp;"}</span>`
+        <span class="count">${g.count != null ? `${g.count.toLocaleString()}${g.unit ?? "편"} 수록` : "&nbsp;"}</span>`
 
     if (!g.entries) {
       return `      <a class="card" href="/${g.slug}">
