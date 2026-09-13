@@ -54,6 +54,15 @@ const [bom, rt, kobis] = await Promise.all([
  * 연간 50위까지만 제공하므로 여기 없다고 한국 미개봉인 것은 아니다.
  * '한국에서 크게 흥행했다' 의 근거로만 쓰고, 없는 것은 판단을 보류한다.
  */
+/** 로튼 출연진 페이지에서 따로 받은 전체 출연진 (crawl-rt-cast.mjs). */
+let rtCast = { byBomId: {} }
+try {
+  rtCast = JSON.parse(await readFile("data/rt-cast.json", "utf8"))
+} catch {
+  console.warn("경고: data/rt-cast.json 이 없어 배우가 편당 5명으로 제한됩니다.")
+  console.warn("      node scripts/crawl-rt-cast.mjs\n")
+}
+
 let krAudiOf = new Map()
 try {
   const f = JSON.parse(await readFile("data/kobis-boxoffice-f.json", "utf8"))
@@ -157,7 +166,12 @@ for (const row of byBomId.values()) {
 
   // 사진 있는 배우만 배우 퀴즈에 쓸 수 있다.
   // 애니메이션은 장르로 걸러도 새는 게 있어(앨빈과 슈퍼밴드, 호튼) 배우 수로 한 번 더 막는다.
-  const actors = (r.actors || []).filter((a) => a.name && a.imageUrl)
+  // 출연진은 전용 수집분(rt-cast)을 우선한다. 영화 페이지의 JSON-LD 는 배우를
+  // 5명까지만 주는데, 출연진 페이지에서 받으면 평균 12.6명이다.
+  // 5명뿐이면 사진 없는 배우 하나에 엔드게임·아바타가 통째로 빠지고,
+  // 배우 격자도 겹칠 일이 없어 만들 수가 없다.
+  const fullCast = rtCast.byBomId?.[row.bomId]?.actors
+  const actors = (fullCast?.length ? fullCast : r.actors || []).filter((a) => a.name && a.imageUrl)
   const quizEligible = !isAnimation(r.genres) && actors.length >= MIN_ACTORS
 
   movies.push({

@@ -92,7 +92,12 @@ const GAMES = [
     desc: "같은 규칙, 무대만 헐리우드입니다. 원제로 답해도 정답으로 인정합니다.",
     tag: "헐리우드",
     countFrom: async () => (JSON.parse(await readFile("data/hollywood-quizzes.json", "utf8"))).count,
-    // 난이도 칩이 없다. 로튼은 배우를 5명만 주므로 '어려움'(비중 6~10위)을 낼 수 없다.
+    // 출연진 페이지를 따로 받기 전에는 배우가 편당 5명뿐이라 난이도를 만들 수 없었다.
+    // 이제 평균 9.8명이라 한국 퀴즈와 같은 구간 나누기가 된다.
+    entries: [
+      { label: "쉬움", query: "?mode=" },
+      { label: "어려움", query: "?mode=hard" },
+    ],
   },
 ]
 

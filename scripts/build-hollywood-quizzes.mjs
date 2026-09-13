@@ -25,8 +25,18 @@ import { dirname } from "node:path"
 const IN_PATH = "data/hollywood-catalog.json"
 const OUT_PATH = "data/hollywood-quizzes.json"
 
-/** 한 판에 쓰는 힌트 수. 로튼이 주는 배우가 최대 5명이라 5로 고정된다. */
+/** 한 판에 쓰는 힌트 수. 출제하려면 최소 이만큼의 배우가 있어야 한다. */
 const HINT_COUNT = 5
+
+/**
+ * 후보 목록에 담을 배우 수.
+ *
+ * 예전에는 로튼이 배우를 5명까지만 줘서 5로 고정이었다. 그래서 헐리우드에는
+ * 난이도를 만들 수가 없었다 — 어려움은 비중 3~7위를 쓰는데 7위가 아예 없었다.
+ * 출연진 페이지를 따로 받아 평균 12.8명이 되었으니 10명까지 담는다.
+ * 한국 퀴즈와 같은 엔진이 이 목록에서 난이도별로 구간을 잘라 쓴다.
+ */
+const WIDE = 10
 
 const flags = {}
 for (const arg of process.argv.slice(2)) {
@@ -102,7 +112,7 @@ for (const m of catalog.movies) {
   if (usable.length < HINT_COUNT) { skipped.notEnoughPhoto++; continue }
 
   // 로튼 출연진 순서가 곧 비중 순위다 (0번이 주연).
-  const candidates = usable.slice(0, HINT_COUNT).map((a, i) => ({
+  const candidates = usable.slice(0, WIDE).map((a, i) => ({
     name: a.name,
     // 로튼 출연진 목록에는 배역명이 없다. 엔진은 빈 값이면 '—' 로 표시한다.
     character: "",
@@ -111,9 +121,10 @@ for (const m of catalog.movies) {
     rtUrl: a.url ?? null,
   }))
 
-  // 기본 힌트 세트 = 후보를 뒤집은 것. '비중 낮은 배우 → 주연' 순.
+  // 기본 힌트 세트 = 앞 5명을 뒤집은 것. '비중 낮은 배우 → 주연' 순.
+  // 실제 플레이는 candidates 에서 난이도별로 다시 뽑으므로 이건 대비용이다.
   const hints = candidates
-    .slice()
+    .slice(0, HINT_COUNT)
     .reverse()
     .map((a, i) => ({ hintOrder: i + 1, ...a }))
 
