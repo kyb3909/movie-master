@@ -50,9 +50,16 @@ const STARS = Number(flags.stars ?? 120)
  * 아홉 칸의 정답을 다 합쳐 이보다 적으면 버린다.
  *
  * 칸마다 답이 딱 하나뿐이면 그 영화를 떠올리지 못하는 순간 끝이라, 실력이 아니라
- * 운에 가까워진다. 18이면 칸당 평균 두 개다.
+ * 운에 가까워진다.
+ *
+ * 처음에는 18(칸당 평균 두 개)로 뒀는데, 같은 축에 함께 나온 배우를 두지 않기로
+ * 하면서 12로 낮췄다. 가로 셋이 서로 겹치지 않는 배우들이라 칸마다 걸리는 작품도
+ * 적어지기 때문이다. 18을 고집하면 쓸 수 있는 격자가 36개로 줄어든다.
+ *
+ * 답이 하나뿐인 칸이 있어도 풀 수는 있다. 반면 함께 나온 배우가 같은 축에 서서
+ * 만날 칸이 아예 없는 것은 고장으로 보인다. 정확함을 택했다.
  */
-const MIN_TOTAL_ANSWERS = Number(flags["min-answers"] ?? 18)
+const MIN_TOTAL_ANSWERS = Number(flags["min-answers"] ?? 12)
 
 /**
  * 몇 개의 가로 조합을 훑어볼 것인가.
@@ -84,22 +91,40 @@ try {
   }
 } catch { /* 보충 파일이 없으면 KOBIS 것만 쓴다 */ }
 
-/** 배우별 출연작과 인지도. 주연·조연만 센다(단역까지 넣으면 아무나 연결된다). */
+/**
+ * 배우별 출연작과 인지도. 주연·조연만 센다(단역까지 넣으면 아무나 연결된다).
+ *
+ * --- 이름으로 합친다 ---
+ * KOBIS 에는 같은 이름의 인물 코드가 둘씩 있는 배우가 79명이다.
+ * 황정민이 8편짜리와 24편짜리로 쪼개져 있는 식이다.
+ *
+ * 코드별로 따로 두면 화면에는 '황정민' 한 사람으로 보이는데 출연작은 절반만
+ * 잡힌다. 실제로 황정민과 진선규가 같은 축에 나란히 섰는데 둘이 함께 나온
+ * 사바하가 안 보여, 만날 칸이 없는 채로 문제가 만들어졌다.
+ *
+ * 합치면 동명이인(정경호·주진모는 실제로 두 사람이다)의 작품이 섞일 수 있지만,
+ * 그건 정답 후보가 하나 늘어날 뿐이라 해가 없다. 반대로 안 합치면 맞는 답이
+ * 틀렸다고 나온다. 덜 나쁜 쪽을 택한다.
+ */
 const A = new Map()
 for (const [movieCd, list] of Object.entries(cast.castByMovie)) {
   if (!title.has(movieCd)) continue
   for (const p of list) {
-    if (!["1", "2"].includes(p.actorGb) || !p.peopleCd) continue
-    if (!A.has(p.peopleCd)) A.set(p.peopleCd, { name: p.name, films: new Set(), fame: 0 })
-    const a = A.get(p.peopleCd)
+    if (!["1", "2"].includes(p.actorGb) || !p.peopleCd || !p.name) continue
+    if (!A.has(p.name)) A.set(p.name, { name: p.name, films: new Set(), fame: 0, codes: new Set() })
+    const a = A.get(p.name)
     a.films.add(movieCd)
+    a.codes.add(p.peopleCd)
     a.fame += (audi.get(movieCd) ?? 0) * (p.actorGb === "1" ? 1 : 0.3)
   }
 }
 
+/** 사진은 인물 코드마다 따로다. 합친 코드 중 사진이 있는 것을 쓴다. */
+const photoOf = (a) => [...a.codes].map((cd) => photo.get(cd)).find(Boolean) ?? null
+
 // 사진이 없으면 축에 세울 수 없다. 이름만 덩그러니 있으면 누군지 모른다.
 const stars = [...A.entries()]
-  .filter(([cd]) => photo.has(cd))
+  .filter(([, a]) => photoOf(a))
   .sort((a, b) => b[1].fame - a[1].fame)
   .slice(0, STARS)
 
@@ -151,6 +176,19 @@ function solvable(cells) {
 
 // ============================================
 
+/** 세로 3명도 서로 함께 나온 적이 없어야 한다. 가로와 같은 이유다. */
+function pickCols(pool) {
+  for (let i = 0; i < pool.length; i++)
+    for (let j = i + 1; j < pool.length; j++) {
+      if (sharesWith(pool[i], pool[j])) continue
+      for (let k = j + 1; k < pool.length; k++) {
+        if (sharesWith(pool[i], pool[k]) || sharesWith(pool[j], pool[k])) continue
+        return [pool[i], pool[j], pool[k]]
+      }
+    }
+  return null
+}
+
 const shuffle = (a) => {
   // Fisher-Yates. sort(() => Math.random() - 0.5) 는 고르게 섞이지 않는다.
   for (let i = a.length - 1; i > 0; i--) {
@@ -160,14 +198,29 @@ const shuffle = (a) => {
   return a
 }
 
-// 가로 3명 후보를 모은다. 세로를 3명 이상 채울 수 있는 조합만 남긴다.
+const sharesWith = (i, j) => ((co[i] >> BigInt(j)) & 1n) === 1n
+
+/**
+ * 가로 3명 후보를 모은다. 세로를 3명 이상 채울 수 있는 조합만 남긴다.
+ *
+ * --- 같은 축에는 함께 나온 배우를 두지 않는다 ---
+ * 가로에 조우진과 유해진이 나란히 서면, 둘이 만나는 칸이 격자에 아예 없다.
+ * 그런데 플레이어는 두 이름을 보고 '봉오동 전투' 를 떠올린다. 어느 칸에 넣어도
+ * 틀렸다고 나오니 게임이 고장난 것처럼 보인다. 실제로 이 신고를 받았다.
+ *
+ * 이 조건을 넣으면 만들 수 있는 격자가 465만 개에서 1만 8천 개로 줄지만,
+ * 우리가 쓰는 것은 300개뿐이라 넉넉하다.
+ */
 const triples = []
 for (let a = 0; a < N; a++)
-  for (let b = a + 1; b < N; b++)
+  for (let b = a + 1; b < N; b++) {
+    if (sharesWith(a, b)) continue
     for (let c = b + 1; c < N; c++) {
+      if (sharesWith(a, c) || sharesWith(b, c)) continue
       const m = co[a] & co[b] & co[c]
       if (bits(m).length >= 3) triples.push([[a, b, c], m])
     }
+  }
 
 shuffle(triples)
 
@@ -181,7 +234,8 @@ for (const [rows, mask] of triples.slice(0, SCAN)) {
 
   // 같은 가로 조합에서 세로만 바꾼 문제가 연달아 나오지 않게 몇 번만 시도한다
   for (let attempt = 0; attempt < 4; attempt++) {
-    const cols = shuffle(colPool.slice()).slice(0, 3)
+    const cols = pickCols(shuffle(colPool.slice()))
+    if (!cols) break
     const key = [...rows].sort().join(",") + "|" + [...cols].sort().join(",")
     if (seenKey.has(key)) continue
 
@@ -194,7 +248,7 @@ for (const [rows, mask] of triples.slice(0, SCAN)) {
     if (!solvable(cells)) { rejected++; continue }
 
     seenKey.add(key)
-    const person = (i) => ({ name: stars[i][1].name, img: photo.get(stars[i][0]) })
+    const person = (i) => ({ name: stars[i][1].name, img: photoOf(stars[i][1]) })
 
     found.push({
       // stars 는 인지도 순이므로 번호가 작을수록 유명하다. 여섯 명의 번호 합으로
