@@ -25,8 +25,14 @@ import { dirname } from "node:path"
 const IN_PATH = "data/hollywood-catalog.json"
 const OUT_PATH = "data/hollywood-quizzes.json"
 
-/** 한 판에 쓰는 힌트 수. 출제하려면 최소 이만큼의 배우가 있어야 한다. */
+/** 한 판에 쓰는 힌트 수의 상한. 사진 있는 배우가 최소 이만큼은 있어야 후보로 본다. */
 const HINT_COUNT = 5
+
+/**
+ * 인지도 걸러내기까지 마친 뒤 남아야 할 최소 배우 수.
+ * 한국 퀴즈와 같다 — 힌트가 셋뿐이어도 전부 아는 얼굴이면 게임이 된다.
+ */
+const MIN_HINTS = 3
 
 /**
  * 후보 목록에 담을 배우 수.
@@ -96,8 +102,12 @@ try {
 const excluded = new Set(overrides.excluded?.hollywood ?? [])
 const titleFix = overrides.titles?.hollywood ?? {}
 
-const quizzes = []
-const skipped = { notEligible: 0, notEnoughPhoto: 0, noTitle: 0, lowGross: 0, excluded: 0, notInKorea: 0 }
+/**
+ * 출제 후보가 되는 영화들을 먼저 추린다.
+ * 배우 인지도를 재려면 전체 목록을 한 번 훑어야 해서 두 번 돌린다.
+ */
+const skipped = { notEligible: 0, notEnoughPhoto: 0, noTitle: 0, lowGross: 0, excluded: 0, notInKorea: 0, noKnownActor: 0 }
+const pool = []
 
 for (const m of catalog.movies) {
   if (excluded.has(m.bomId)) { skipped.excluded++; continue }
@@ -111,12 +121,47 @@ for (const m of catalog.movies) {
   const usable = (m.actors ?? []).filter((a) => a.name && a.imageUrlLarge)
   if (usable.length < HINT_COUNT) { skipped.notEnoughPhoto++; continue }
 
-  // 로튼 출연진 순서가 곧 비중 순위다 (0번이 주연).
-  const candidates = usable.slice(0, WIDE).map((a, i) => ({
+  pool.push({ m, usable: usable.slice(0, WIDE) })
+}
+
+/**
+ * 배우 인지도 = 이 출제 목록에서 몇 편에 나오는가.
+ *
+ * --- 왜 비중 순위를 그대로 쓰지 않나 ---
+ * 로튼의 출연진 순서는 IMDb 와 같은 크레딧 순서다(인셉션 1~7위가 완전히 일치했다).
+ * 순서가 틀린 게 아니라, 크레딧 순서가 '배역의 비중' 이지 '얼마나 알려졌나' 가
+ * 아니라서 생기는 문제다.
+ *
+ * 인셉션에서 딜립 라오가 6위, 킬리언 머피가 7위, 마이클 케인이 10위다.
+ * 비중대로 공개하면 아무도 모르는 얼굴이 먼저 나오고 아는 얼굴이 뒤로 밀린다.
+ *
+ * 한국 영화는 이 문제가 없다. 비중 1~5위가 곧 아는 얼굴이기 때문이다.
+ * 헐리우드는 그 관계가 깨지므로 다른 신호가 필요하다.
+ *
+ * 새로 수집할 것은 없다. 우리가 이미 가진 출연 기록을 세면 된다.
+ */
+const appearances = new Map()
+for (const { usable } of pool)
+  for (const a of usable) appearances.set(a.name, (appearances.get(a.name) ?? 0) + 1)
+
+/** 이 편수보다 적게 나오는 배우는 힌트로 쓰지 않는다. */
+const minAppear = Number(flags["min-appear"] ?? 2)
+
+const quizzes = []
+
+for (const { m, usable } of pool) {
+  // 아는 얼굴만 남기고, 남은 것들 사이에서 다시 비중 순으로 번호를 매긴다.
+  // 엔진은 이 번호로 난이도 구간을 자르므로 중간이 비면 안 된다.
+  const known = usable.filter((a) => (appearances.get(a.name) ?? 0) >= minAppear)
+  if (known.length < MIN_HINTS) { skipped.noKnownActor++; continue }
+
+  const candidates = known.map((a, i) => ({
     name: a.name,
     // 로튼 출연진 목록에는 배역명이 없다. 엔진은 빈 값이면 '—' 로 표시한다.
     character: "",
     billing: i + 1,
+    // 원래 크레딧 순서. 검수할 때 대조하려고 남긴다.
+    credit: usable.indexOf(a) + 1,
     imageUrl: a.imageUrlLarge,
     rtUrl: a.url ?? null,
   }))
@@ -154,7 +199,7 @@ quizzes.sort((a, b) => (b.krAudi ?? 0) - (a.krAudi ?? 0) || (b.gross ?? 0) - (a.
 console.log(`\n헐리우드 배우 퀴즈 생성`)
 console.log(`  카탈로그 ${catalog.movies.length}편 (그중 quizEligible ${catalog.quizCount ?? "?"}편)`)
 console.log(`  생성된 퀴즈 ${quizzes.length}편 · 힌트 ${quizzes.length * HINT_COUNT}개`)
-console.log(`  제외: quizEligible 아님 ${skipped.notEligible} / 큰 사진 부족 ${skipped.notEnoughPhoto} / 제목 없음 ${skipped.noTitle} / 흥행 미달 ${skipped.lowGross} / 검수 제외 ${skipped.excluded} / 한국 흥행 없음 ${skipped.notInKorea}`)
+console.log(`  제외: quizEligible 아님 ${skipped.notEligible} / 큰 사진 부족 ${skipped.notEnoughPhoto} / 제목 없음 ${skipped.noTitle} / 흥행 미달 ${skipped.lowGross} / 검수 제외 ${skipped.excluded} / 한국 흥행 없음 ${skipped.notInKorea} / 아는 배우 부족 ${skipped.noKnownActor}`)
 
 if (quizzes.length) {
   const q = quizzes[0]
