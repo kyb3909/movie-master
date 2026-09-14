@@ -125,34 +125,46 @@ for (const m of catalog.movies) {
 }
 
 /**
- * 배우 인지도 = 이 출제 목록에서 몇 편에 나오는가.
+ * 배우 인지도.
  *
- * --- 왜 비중 순위를 그대로 쓰지 않나 ---
+ * --- 왜 비중 순위만으로는 안 되나 ---
  * 로튼의 출연진 순서는 IMDb 와 같은 크레딧 순서다(인셉션 1~7위가 완전히 일치했다).
  * 순서가 틀린 게 아니라, 크레딧 순서가 '배역의 비중' 이지 '얼마나 알려졌나' 가
- * 아니라서 생기는 문제다.
+ * 아니라서 생기는 문제다. 인셉션에서 딜립 라오가 6위, 킬리언 머피가 7위다.
  *
- * 인셉션에서 딜립 라오가 6위, 킬리언 머피가 7위, 마이클 케인이 10위다.
- * 비중대로 공개하면 아무도 모르는 얼굴이 먼저 나오고 아는 얼굴이 뒤로 밀린다.
+ * 한국 영화는 이 문제가 없다. KOBIS 비중 1~5위가 곧 아는 얼굴이기 때문이다.
  *
- * 한국 영화는 이 문제가 없다. 비중 1~5위가 곧 아는 얼굴이기 때문이다.
- * 헐리우드는 그 관계가 깨지므로 다른 신호가 필요하다.
+ * --- 한 번 잘못 짚었던 것 ---
+ * 처음에는 '우리 출제 목록에서 몇 편에 나오는가' 로 쟀는데 크게 틀렸다.
+ * 그건 유명한 정도가 아니라 '최근 20년 헐리우드 흥행작에 얼마나 자주 나왔나' 다.
+ * 히스 레저는 다크 나이트 한 편뿐이라 무명으로 잡혀 조커가 힌트에서 빠졌다.
+ * 보헤미안 랩소디는 라미 말렉만 남고 퀸 멤버 넷이 전부 걸러졌다.
  *
- * 새로 수집할 것은 없다. 우리가 이미 가진 출연 기록을 세면 된다.
+ * 그래서 IMDb 공개 데이터로 바꿨다. 배우의 대표작들이 받은 평점 투표 수를 더한 값이다.
+ * 한 편만 찍고 은퇴했어도 그 한 편이 유명하면 높게 나온다.
  */
-const appearances = new Map()
-for (const { usable } of pool)
-  for (const a of usable) appearances.set(a.name, (appearances.get(a.name) ?? 0) + 1)
+let fameOf = new Map()
+try {
+  const f = JSON.parse(await readFile("data/imdb-fame.json", "utf8"))
+  fameOf = new Map(Object.entries(f.byName))
+} catch {
+  console.warn("경고: data/imdb-fame.json 이 없어 인지도를 재지 못합니다. 크레딧 순서만 씁니다.")
+  console.warn("      node scripts/build-imdb-fame.mjs\n")
+}
 
-/** 이 편수보다 적게 나오는 배우는 힌트로 쓰지 않는다. */
-const minAppear = Number(flags["min-appear"] ?? 2)
+/**
+ * 이 점수보다 낮은 배우는 힌트로 쓰지 않는다.
+ * 대표작 투표 수 합이라 단위가 크다. 기준값은 build-imdb-fame.mjs 의 출력을 보고 정한다.
+ */
+const minFame = Number(flags["min-fame"] ?? 0)
 
 const quizzes = []
 
 for (const { m, usable } of pool) {
   // 아는 얼굴만 남기고, 남은 것들 사이에서 다시 비중 순으로 번호를 매긴다.
   // 엔진은 이 번호로 난이도 구간을 자르므로 중간이 비면 안 된다.
-  const known = usable.filter((a) => (appearances.get(a.name) ?? 0) >= minAppear)
+  // 인지도 자료가 없거나 기준이 0 이면 크레딧 순서를 그대로 쓴다.
+  const known = minFame > 0 ? usable.filter((a) => (fameOf.get(a.name) ?? 0) >= minFame) : usable
   if (known.length < MIN_HINTS) { skipped.noKnownActor++; continue }
 
   const candidates = known.map((a, i) => ({
