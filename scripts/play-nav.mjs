@@ -31,29 +31,32 @@ export const homeHTML = `<a class="home" data-nav="home"><i>←</i>누룽지 극
 
 /** 마스트헤드 바로 아래에 들어가는 메뉴바. active 는 현재 페이지의 slug. */
 export const navHTML = (active) =>
-  `  <nav class="nav" id="nav">
+  `  <nav class="nav" id="nav" aria-label="주 메뉴">
+    <a href="/" data-nav="home">전체 게임</a>
 ${NAV_ITEMS.map(
   (it) =>
-    `    <a class="${it.slug === active ? "on" : ""}" data-nav="${it.slug}">${it.name}</a>`
+    `    <a href="/${it.slug}" class="${it.slug === active ? "on" : ""}"${it.slug === active ? ' aria-current="page"' : ""} data-nav="${it.slug}">${it.name}</a>`
 ).join("\n")}
   </nav>`
 
 /** 게임 페이지들이 쓰는 shadcn 토큰에 맞춘 스타일. 토큰 이름은 각 페이지의 :root 와 같다. */
 export const navCSS = `
   /* ── 메뉴바 ──────────────────────────────────────────────── */
-  .nav {
-    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
-    margin: 0 0 4px; padding: 8px 0 0;
-  }
+  .game-navigation { border-bottom: 1px solid var(--border); }
+  .nav { display: flex; align-items: stretch; gap: 32px; flex-wrap: nowrap;
+    max-width: 1328px; margin: auto; padding: 0 32px; overflow-x: auto; }
   .nav a {
-    padding: 5px 10px; border-radius: var(--radius);
-    font-size: 12.5px; font-weight: 500; color: var(--muted-foreground);
+    padding: 16px 0 13px; min-height: 56px; border-bottom: 3px solid transparent; border-radius: 0;
+    font-size: 14px; font-weight: 600; color: var(--muted-foreground);
     text-decoration: none; cursor: pointer; white-space: nowrap;
     transition: color .15s, background .15s;
   }
-  .nav a:hover { color: var(--foreground); background: var(--muted); }
-  .nav a.on { color: var(--foreground); font-weight: 600; background: var(--muted); }
-  .nav a:first-child { margin-left: -10px; }
+  .nav a:hover { color: var(--foreground); border-bottom-color: var(--foreground); }
+  .nav a.on { color: var(--foreground); font-weight: 800; border-bottom-color: var(--foreground); }
+  @media (max-width: 600px) {
+    .nav { gap: 24px; padding: 0 20px; }
+    .nav a { min-height: 50px; font-size: 13px; padding-top: 13px; padding-bottom: 10px; }
+  }
 
   /* 마스트헤드의 사이트 이름 = 홈 링크. 밑줄로 누를 수 있는 것임을 알린다. */
   .brand .home {
@@ -80,6 +83,10 @@ export const navScript = `
     if (key === 'home') {
       // 로컬 검수본에는 랜딩이 없다. 죽은 링크로 두느니 평범한 글자로 남긴다.
       if (!local) a.href = '/';
+      else {
+        a.removeAttribute('href');
+        if (a.closest('.nav')) a.hidden = true;
+      }
       return;
     }
     a.href = local ? ITEMS[key] : '/' + key;

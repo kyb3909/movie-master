@@ -16,6 +16,8 @@
 
 import { readFile, writeFile, mkdir, copyFile, access } from "node:fs/promises"
 
+import { buildLanding } from "./build-landing.mjs"
+
 const OUT = "deploy/noorung-quiz"
 
 const exists = async (p) => {
@@ -151,156 +153,7 @@ await writeFile(
 // 랜딩
 // ============================================
 
-/**
- * 게임 페이지들과 같은 shadcn 토큰·Pretendard·에디토리얼 문법을 쓴다.
- * 여기만 다른 색을 쓰면 들어가는 순간 다른 서비스처럼 보인다.
- * 토큰을 고칠 일이 생기면 build-quiz-play.mjs, build-highlow-play.mjs 와 함께 고쳐야 한다.
- */
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))
-
-/**
- * 카드 전체가 링크였는데, 난이도가 생기면서 카드 안에 링크가 또 필요해졌다.
- * 링크 안에 링크는 넣을 수 없으므로(브라우저가 마크업을 고쳐버린다)
- * 난이도가 있는 게임은 카드를 div 로 두고 제목과 난이도 칩을 각각 링크로 만든다.
- */
-const cards = shipped
-  .map((g) => {
-    const meta = `        <p>${esc(g.desc)}</p>
-        <span class="count">${g.count != null ? `${g.count.toLocaleString()}${g.unit ?? "편"} 수록` : "&nbsp;"}</span>`
-
-    if (!g.entries) {
-      return `      <a class="card" href="/${g.slug}">
-        <span class="tag">${esc(g.tag)}</span>
-        <h2>${esc(g.name)}</h2>
-${meta}
-      </a>`
-    }
-
-    const chips = g.entries
-      .map((e) => `          <a href="/${g.slug}${e.query}">${esc(e.label)}</a>`)
-      .join("\n")
-
-    return `      <div class="card">
-        <span class="tag">${esc(g.tag)}</span>
-        <h2><a href="/${g.slug}">${esc(g.name)}</a></h2>
-${meta}
-        <div class="entries">
-${chips}
-        </div>
-      </div>`
-  })
-  .join("\n")
-
-const index = `<!doctype html>
-<html lang="ko">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>누룽지 극장</title>
-<meta name="description" content="영화 퀴즈 네 가지. 배우 얼굴로 제목 맞히기, 배우 격자 채우기, 로튼토마토 지수 하이로우.">
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<style>
-  :root {
-    --background: oklch(0.98 0.002 240);
-    --foreground: oklch(0.15 0.01 240);
-    --card: oklch(1 0 0);
-    --muted: oklch(0.95 0.003 240);
-    --muted-foreground: oklch(0.4 0.01 240);
-    --border: oklch(0.88 0.005 240);
-    --radius: 0.5rem;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: oklch(0.13 0.015 240);
-      --foreground: oklch(0.96 0.005 240);
-      --card: oklch(0.16 0.015 240);
-      --muted: oklch(0.2 0.015 240);
-      --muted-foreground: oklch(0.62 0.01 240);
-      --border: oklch(0.24 0.015 240);
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--background); color: var(--foreground);
-    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-      "Segoe UI", "Malgun Gothic", sans-serif;
-    font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased;
-  }
-  .wrap { max-width: 820px; margin: 0 auto; padding: 20px 20px 64px; }
-  .masthead {
-    display: flex; justify-content: space-between; align-items: center;
-    padding-bottom: 14px; border-bottom: 1px solid var(--foreground);
-  }
-  .brand { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
-  .brand span { color: var(--muted-foreground); font-weight: 500; margin-left: 7px; }
-  .kicker {
-    display: block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.16em;
-    color: var(--muted-foreground); text-transform: uppercase;
-  }
-  .lede { padding: 40px 0 30px; }
-  .lede h1 { margin: 8px 0 0; font-size: 30px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.25; }
-  .lede p { margin: 10px 0 0; color: var(--muted-foreground); font-size: 14px; }
-
-  .games { display: grid; gap: 12px; grid-template-columns: 1fr; }
-  @media (min-width: 700px) { .games { grid-template-columns: repeat(3, 1fr); } }
-
-  .card {
-    display: flex; flex-direction: column; min-width: 0;
-    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 18px 18px 16px; text-decoration: none; color: inherit;
-    transition: border-color .15s, transform .15s;
-  }
-  .card:hover { border-color: var(--foreground); transform: translateY(-2px); }
-  .card .tag {
-    font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
-    color: var(--muted-foreground); text-transform: uppercase;
-  }
-  .card h2 { margin: 8px 0 0; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
-  .card h2 a { color: inherit; text-decoration: none; }
-  .card p { margin: 8px 0 16px; font-size: 13px; color: var(--muted-foreground); flex: 1; }
-  .card .count {
-    font-size: 11.5px; color: var(--muted-foreground);
-    font-variant-numeric: tabular-nums; border-top: 1px solid var(--border); padding-top: 10px;
-  }
-
-  /* 난이도 — 어느 쪽으로 들어갈지 카드에서 바로 고른다. */
-  .entries { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-  .entries a {
-    padding: 5px 11px; border: 1px solid var(--border); border-radius: 999px;
-    font-size: 12.5px; color: var(--muted-foreground); text-decoration: none;
-    transition: color .15s, border-color .15s;
-  }
-  .entries a:hover { color: var(--foreground); border-color: var(--foreground); }
-
-  .foot {
-    margin-top: 44px; padding-top: 16px; border-top: 1px solid var(--border);
-    font-size: 11.5px; color: var(--muted-foreground);
-  }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header class="masthead">
-    <h1 class="brand">누룽지 극장<span>영화 퀴즈</span></h1>
-  </header>
-
-  <section class="lede">
-    <span class="kicker">Play</span>
-    <h1>얼굴로, 숫자로<br>영화를 맞혀 보세요</h1>
-    <p>로그인 없이 바로 시작합니다.</p>
-  </section>
-
-  <nav class="games">
-${cards}
-  </nav>
-
-  <footer class="foot">
-    한국 영화 정보는 영화진흥위원회(KOBIS), 헐리우드 영화 정보는 로튼토마토와 Box Office Mojo 를 참고했습니다.
-  </footer>
-</div>
-</body>
-</html>`
+const index = await buildLanding(shipped)
 
 await writeFile(`${OUT}/index.html`, index, "utf8")
 

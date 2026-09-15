@@ -25,8 +25,9 @@
  */
 
 import { readFile, writeFile } from "node:fs/promises"
-import { homeHTML, navCSS, navHTML, navScript } from "./play-nav.mjs"
+import { navCSS, navHTML, navScript } from "./play-nav.mjs"
 import { rankCSS, rankHTML, rankScript } from "./play-rank.mjs"
+import { themeCSS, gameThemeCSS, siteHeaderHTML } from "./play-theme.mjs"
 
 /**
  * 입력은 scripts/build-hollywood-catalog.mjs 가 만든 한 파일뿐이다.
@@ -181,50 +182,7 @@ const html = `<!doctype html>
 <link rel="preconnect" href="https://image.tmdb.org">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
-  /* ── shadcn 토큰 (app/globals.css · quiz-play 와 동일한 값) ────── */
-  :root {
-    --background: oklch(0.98 0.002 240);
-    --foreground: oklch(0.15 0.01 240);
-    --card: oklch(1 0 0);
-    --muted: oklch(0.95 0.003 240);
-    --muted-foreground: oklch(0.4 0.01 240);
-    --primary: oklch(0.45 0.06 230);
-    --primary-foreground: oklch(0.99 0 0);
-    --border: oklch(0.88 0.005 240);
-    --ring: oklch(0.45 0.06 230);
-    --destructive: oklch(0.55 0.2 25);
-    --success: oklch(0.52 0.13 155);
-    --radius: 0.5rem;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: oklch(0.13 0.015 240);
-      --foreground: oklch(0.96 0.005 240);
-      --card: oklch(0.16 0.015 240);
-      --muted: oklch(0.2 0.015 240);
-      --muted-foreground: oklch(0.62 0.01 240);
-      --primary: oklch(0.6 0.08 240);
-      --primary-foreground: oklch(0.13 0.015 240);
-      --border: oklch(0.24 0.015 240);
-      --ring: oklch(0.6 0.08 240);
-      --destructive: oklch(0.62 0.18 25);
-      --success: oklch(0.7 0.14 155);
-    }
-  }
-
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0;
-    background: var(--background);
-    color: var(--foreground);
-    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-      "Segoe UI", "Malgun Gothic", sans-serif;
-    font-size: 15px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-  }
+${themeCSS}
   .wrap { max-width: 820px; margin: 0 auto; padding: 20px 20px 64px; }
 
   /* ── 마스트헤드 ───────────────────────────────────────────── */
@@ -396,15 +354,18 @@ ${rankCSS}
     font-weight: 600;
   }
   .modes .cnt { font-size: 11.5px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+${gameThemeCSS}
 </style>
 </head>
-<body>
-<div class="wrap">
+<body class="game-highlow">
+${siteHeaderHTML}
+<div class="game-navigation">${navHTML("highlow")}</div>
+<main class="wrap" id="main" tabindex="-1">
   <header class="masthead">
-    <h1 class="brand">로튼 하이로우<span>${homeHTML}</span></h1>
+    <h1 class="brand">로튼 하이로우</h1>
     <span class="score" id="score">연속 <b>0</b> · 최고 0</span>
   </header>
-${navHTML("highlow")}
+
 
   <div class="modes" id="modes">
     <span class="lab">범위</span>
@@ -431,7 +392,7 @@ ${rankHTML("랭킹")}
 
   <footer class="foot">로튼토마토 신선도(Tomatometer) 기준입니다. 점수가 같으면 맞은 것으로 칩니다.
     한국 개봉작은 국내에서 30만 명 이상이 본 외국영화입니다.</footer>
-</div>
+</main>
 
 <script>
 const ALL_MOVIES = ${JSON.stringify(movies)};

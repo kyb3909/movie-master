@@ -25,8 +25,10 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises"
 import { dirname } from "node:path"
-import { homeHTML, navCSS, navHTML, navScript } from "./play-nav.mjs"
+import { navCSS, navHTML, navScript } from "./play-nav.mjs"
 import { rankCSS, rankHTML, rankScript } from "./play-rank.mjs"
+import { themeCSS, gameThemeCSS, siteHeaderHTML } from "./play-theme.mjs"
+import { loadMovieTitles, titleSuggestionsCSS, titleSuggestionsScript } from "./movie-titles.mjs"
 
 const IN_PATH = "data/grid-puzzles.json"
 const TITLES_PATH = "data/quizzes.json"
@@ -55,8 +57,9 @@ const puzzles = data.puzzles.map((z) => ({
   a: z.cells,
 }))
 
-/** 자동완성에 쓸 제목 목록. 출제 대상 한국 영화 전부. */
-const titles = JSON.parse(await readFile(TITLES_PATH, "utf8")).quizzes.map((q) => q.title)
+/** 자동완성은 출제 조건과 별개인 전체 영화 목록을 사용한다. */
+const quizTitles = JSON.parse(await readFile(TITLES_PATH, "utf8")).quizzes.map((q) => q.title)
+const titles = await loadMovieTitles([...quizTitles, ...data.puzzles.flatMap((p) => p.cells.flat())])
 
 const html = `<!doctype html>
 <html lang="ko">
@@ -69,45 +72,7 @@ const html = `<!doctype html>
 <link rel="preconnect" href="https://www.kobis.or.kr">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
-  :root {
-    --background: oklch(0.98 0.002 240);
-    --foreground: oklch(0.15 0.01 240);
-    --card: oklch(1 0 0);
-    --muted: oklch(0.95 0.003 240);
-    --muted-foreground: oklch(0.4 0.01 240);
-    --primary: oklch(0.45 0.06 230);
-    --primary-foreground: oklch(0.99 0 0);
-    --border: oklch(0.88 0.005 240);
-    --ring: oklch(0.45 0.06 230);
-    --destructive: oklch(0.55 0.2 25);
-    --success: oklch(0.52 0.13 155);
-    --radius: 0.5rem;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: oklch(0.13 0.015 240);
-      --foreground: oklch(0.96 0.005 240);
-      --card: oklch(0.16 0.015 240);
-      --muted: oklch(0.2 0.015 240);
-      --muted-foreground: oklch(0.62 0.01 240);
-      --primary: oklch(0.6 0.08 240);
-      --primary-foreground: oklch(0.13 0.015 240);
-      --border: oklch(0.24 0.015 240);
-      --ring: oklch(0.6 0.08 240);
-      --destructive: oklch(0.62 0.18 25);
-      --success: oklch(0.7 0.14 155);
-    }
-  }
-
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0; background: var(--background); color: var(--foreground);
-    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-      "Segoe UI", "Malgun Gothic", sans-serif;
-    font-size: 15px; line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-  }
+${themeCSS}
   .wrap { max-width: 820px; margin: 0 auto; padding: 20px 20px 64px; }
 
   .masthead {
@@ -226,17 +191,21 @@ ${rankCSS}
     .cell { min-height: 64px; font-size: 12px; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+${gameThemeCSS}
+${titleSuggestionsCSS}
 </style>
 </head>
-<body>
-<div class="wrap">
+<body class="game-grid">
+${siteHeaderHTML}
+<div class="game-navigation">${navHTML("grid")}</div>
+<main class="wrap" id="main" tabindex="-1">
 
   <div class="masthead">
-    <h1 class="brand">${homeHTML}<span>배우 격자</span></h1>
+    <h1 class="brand">배우 격자</h1>
     <span class="score" id="score"></span>
   </div>
 
-${navHTML("grid")}
+
 
   <p class="rule">가로와 세로의 <b>두 배우가 함께 나온 영화</b>를 칸마다 적어 아홉 칸을 채웁니다.
   같은 영화는 한 번만 쓸 수 있고, <b id="ruleTries">시도는 아홉 번</b>입니다.</p>
@@ -268,7 +237,7 @@ ${navHTML("grid")}
       <button class="btn" type="submit">확인</button>
       <button class="btn ghost" type="button" id="cancel">취소</button>
     </form>
-    <ul class="sugg" id="sugg"></ul>
+    <ul class="title-suggestions" id="sugg" hidden></ul>
   </div>
 
   <p class="msg" id="msg" role="status" aria-live="polite"></p>
@@ -286,12 +255,12 @@ ${navHTML("grid")}
 ${rankHTML("랭킹")}
 
   <p class="foot">문제는 관객 100만 명 이상인 한국 영화 중에서 냅니다. 배우가 함께 나온 작품이 여럿이면 어느 것을 적어도 정답입니다.</p>
-</div>
+</main>
 
 <script>
+${titleSuggestionsScript(titles)}
 const PEOPLE = ${JSON.stringify(people)};
 const PUZZLES = ${JSON.stringify(puzzles)};
-const TITLES = ${JSON.stringify([...new Set(titles)])};
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -318,6 +287,7 @@ if (mode !== 'hard') mode = 'easy';
 let cur = null, filled = [], used = new Set(), left = 0, active = -1, over = false;
 
 function pickPuzzle() {
+  titleSuggestions.clear();
   cur = PUZZLES[Math.floor(Math.random() * PUZZLES.length)];
   filled = new Array(9).fill(null);
   used = new Set();
@@ -367,17 +337,9 @@ function openCell(i) {
   const c = PEOPLE[cur.c[i % 3]][0];
   $('askedFor').innerHTML = '<b>' + esc(r) + '</b> 와 <b>' + esc(c) + '</b> 가 함께 나온 영화는?';
   $('answer').classList.remove('hidden');
-  $('sugg').innerHTML = '';
+  titleSuggestions.clear();
   $('guess').value = '';
   $('guess').focus();
-}
-
-/** 두 글자부터 후보를 보여준다. 모바일에서 제목을 끝까지 치지 않아도 되게. */
-function suggest() {
-  const q = norm($('guess').value);
-  if (q.length < 2) { $('sugg').innerHTML = ''; return; }
-  const hit = TITLES.filter((t) => norm(t).includes(q)).slice(0, 5);
-  $('sugg').innerHTML = hit.map((t) => '<li><button type="button" data-t="' + esc(t) + '">' + esc(t) + '</button></li>').join('');
 }
 
 function submit(text) {
@@ -404,7 +366,7 @@ function submit(text) {
   } else {
     say('아닙니다. 남은 시도 ' + left + '번', 'no');
     $('guess').value = '';
-    $('sugg').innerHTML = '';
+    titleSuggestions.clear();
     $('guess').focus();   // 오답마다 키보드가 닫히면 매번 다시 눌러야 한다
   }
 
@@ -418,6 +380,7 @@ function say(t, cls) {
 }
 
 function finish() {
+  titleSuggestions.clear();
   over = true;
   active = -1;
   $('answer').classList.add('hidden');
@@ -455,12 +418,8 @@ document.querySelector('.board').addEventListener('click', (e) => {
   if (b && !b.disabled) openCell(Number(b.dataset.i));
 });
 $('f').addEventListener('submit', (e) => { e.preventDefault(); submit($('guess').value); });
-$('guess').addEventListener('input', suggest);
-$('sugg').addEventListener('click', (e) => {
-  const b = e.target.closest('button');
-  if (b) submit(b.dataset.t);
-});
 $('cancel').onclick = () => {
+  titleSuggestions.clear();
   active = -1;
   $('answer').classList.add('hidden');
   document.querySelectorAll('.cell').forEach((b) => b.classList.remove('active'));

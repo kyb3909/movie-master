@@ -56,7 +56,7 @@ export const rankHTML = (title) => `  <section class="rank" id="rank">
       <span class="note" id="rankNote"></span>
     </div>
     <div class="entry hidden" id="rankEntry">
-      <input type="text" id="nick" maxlength="${NICK_MAX}" placeholder="닉네임"
+      <input type="text" id="nick" aria-label="랭킹에 등록할 닉네임" maxlength="${NICK_MAX}" placeholder="닉네임"
              autocomplete="off" spellcheck="false">
       <button class="btn" id="rankSend">등록</button>
     </div>

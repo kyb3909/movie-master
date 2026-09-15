@@ -39,8 +39,10 @@
  */
 
 import { readFile, writeFile } from "node:fs/promises"
-import { homeHTML, navCSS, navHTML, navScript } from "./play-nav.mjs"
+import { navCSS, navHTML, navScript } from "./play-nav.mjs"
 import { rankCSS, rankHTML, rankScript } from "./play-rank.mjs"
+import { themeCSS, gameThemeCSS, siteHeaderHTML } from "./play-theme.mjs"
+import { loadMovieTitles, titleSuggestionsCSS, titleSuggestionsScript } from "./movie-titles.mjs"
 
 const flags = {}
 for (const arg of process.argv.slice(2)) {
@@ -78,6 +80,7 @@ if (!STAT) {
 }
 
 const data = JSON.parse(await readFile(IN_PATH, "utf8"))
+const suggestionTitles = await loadMovieTitles(data.quizzes.flatMap((q) => [q.title, q.titleEn]))
 
 /** 한 판에 보여줄 힌트 수. 생성된 기본 세트의 길이를 따른다. */
 const HINT_COUNT = data.quizzes[0]?.hints.length ?? 5
@@ -122,50 +125,7 @@ const html = `<!doctype html>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
-  /* ── shadcn 토큰 (app/globals.css 와 동일한 값) ───────────────── */
-  :root {
-    --background: oklch(0.98 0.002 240);
-    --foreground: oklch(0.15 0.01 240);
-    --card: oklch(1 0 0);
-    --muted: oklch(0.95 0.003 240);
-    --muted-foreground: oklch(0.4 0.01 240);
-    --primary: oklch(0.45 0.06 230);
-    --primary-foreground: oklch(0.99 0 0);
-    --border: oklch(0.88 0.005 240);
-    --ring: oklch(0.45 0.06 230);
-    --destructive: oklch(0.55 0.2 25);
-    --success: oklch(0.52 0.13 155);
-    --radius: 0.5rem;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: oklch(0.13 0.015 240);
-      --foreground: oklch(0.96 0.005 240);
-      --card: oklch(0.16 0.015 240);
-      --muted: oklch(0.2 0.015 240);
-      --muted-foreground: oklch(0.62 0.01 240);
-      --primary: oklch(0.6 0.08 240);
-      --primary-foreground: oklch(0.13 0.015 240);
-      --border: oklch(0.24 0.015 240);
-      --ring: oklch(0.6 0.08 240);
-      --destructive: oklch(0.62 0.18 25);
-      --success: oklch(0.7 0.14 155);
-    }
-  }
-
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0;
-    background: var(--background);
-    color: var(--foreground);
-    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-      "Segoe UI", "Malgun Gothic", sans-serif;
-    font-size: 15px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-  }
+${themeCSS}
   .wrap { max-width: 820px; margin: 0 auto; padding: 20px 20px 64px; }
 
   /* ── 마스트헤드 ───────────────────────────────────────────── */
@@ -325,15 +285,19 @@ ${rankCSS}
     font-weight: 600;
   }
   .modes .cnt { font-size: 11.5px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+${gameThemeCSS}
+${titleSuggestionsCSS}
 </style>
 </head>
-<body>
-<div class="wrap">
+<body class="game-quiz">
+${siteHeaderHTML}
+<div class="game-navigation">${navHTML(GAME)}</div>
+<main class="wrap" id="main" tabindex="-1">
   <header class="masthead">
-    <h1 class="brand">${TITLE}<span>${homeHTML}</span></h1>
+    <h1 class="brand">${TITLE}</h1>
     <span class="score" id="score">1 / ${ROUNDS}판 · 0점</span>
   </header>
-${navHTML(GAME)}
+
 
   <div class="modes hidden" id="modes">
     <span class="lab">난이도</span>
@@ -356,12 +320,13 @@ ${navHTML(GAME)}
   <div class="hints" id="hints"></div>
 
   <form class="form" id="f">
-    <input type="text" id="guess" placeholder="영화 제목을 입력하세요"
+    <input type="text" id="guess" aria-label="영화 제목" placeholder="영화 제목을 입력하세요"
            autocomplete="off" autocapitalize="off" spellcheck="false">
     <button type="submit" class="btn">확인</button>
     <button type="button" class="btn btn-ghost" id="skip">포기</button>
   </form>
-  <p class="msg" id="msg"></p>
+  <ul class="title-suggestions" id="sugg" hidden></ul>
+  <p class="msg" id="msg" role="status" aria-live="polite"></p>
 
   <section class="result hidden" id="result">
     <span class="kicker" id="rLabel">정답</span>
@@ -390,9 +355,10 @@ ${rankHTML("랭킹")}
 
   <footer class="foot">비중이 낮은 배우부터 공개됩니다. 힌트를 적게 볼수록 점수가 높습니다.
     ${ROUNDS}판을 풀면 점수가 이 브라우저에 기록됩니다.</footer>
-</div>
+</main>
 
 <script>
+${titleSuggestionsScript(suggestionTitles)}
 const QUIZZES = ${JSON.stringify(quizzes)};
 const HINT_COUNT = ${HINT_COUNT};
 ${navScript}
@@ -459,11 +425,11 @@ function dist(a, b) {
 const tolerance = len => (len <= 6 ? 1 : len <= 12 ? 2 : 3);
 
 /**
- * 출제 목록에 있는 모든 제목.
+ * 자동완성의 전체 영화 제목. 출제 밖의 다른 작품도 오타로 인정하지 않는다.
  * 오타 허용을 켜면 '아저씨' 를 정답으로 두고 '아가씨' 라고 써도 통과해 버린다.
  * 다른 영화의 제목을 정확히 적었다면 오타가 아니라 다른 답을 낸 것이므로 오답 처리한다.
  */
-const TITLES = new Set(QUIZZES.flatMap(q => [q.t, q.e]).filter(Boolean).map(norm));
+const TITLES = new Set(SUGGESTION_TITLES.map(norm));
 
 /**
  * 정답 판정. 받아쓰기 시험이 아니므로 오타와 띄어쓰기는 눈감아 준다.
@@ -638,6 +604,7 @@ function shuffle(a) {
 }
 
 function pick() {
+  titleSuggestions.clear();
   if (!pool.length) pool = shuffle(QUIZ_POOL());
   cur = QUIZZES[pool.pop()];
   hints = drawHints(cur.c);
@@ -696,6 +663,7 @@ function finish(win) {
   // 한 판은 한 번만 정산한다. 힌트를 다 쓴 뒤 답이 한 번 더 들어오면
   // (폼을 숨기기 전에 엔터가 겹치는 등) 같은 판이 두 번 기록되고 점수도 두 번 들어간다.
   if (over) return;
+  titleSuggestions.clear();
   over = true;
 
   const used = shown;                 // 공개를 마저 하기 전에 세어둔다
@@ -728,6 +696,7 @@ function finish(win) {
 
 $('f').onsubmit = e => {
   e.preventDefault();
+  if (over) return;
   const v = $('guess').value.trim();
   if (!v) return;
   if (accepts([cur.t, cur.e], v)) { finish(true); return; }
