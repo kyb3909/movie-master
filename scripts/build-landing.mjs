@@ -5,10 +5,12 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 
 /** Reuse real catalog imagery; missing optional catalogs leave a typographic cover. */
 async function coverImages() {
-  const images = { quiz: [], grid: [], highlow: [], hollywood: [] }
+  const images = { quiz: [], grid: [], highlow: [], hollywood: [], casting: [] }
   try {
     const { quizzes } = JSON.parse(await readFile("data/quizzes.json", "utf8"))
     const actors = quizzes.flatMap((q) => q.candidates ?? q.hints)
+    images.casting = ["이병헌", "전지현", "강동원"].map((name) => actors.find((a) => a.name === name && a.imageUrl))
+      .filter(Boolean).map((a) => ({ src: a.imageUrl, alt: a.name }))
     for (const [slug, names] of Object.entries({ quiz: ["송강호", "김혜수", "최민식"], grid: ["황정민", "하정우", "조진웅"] })) {
       images[slug] = names.map((name) => actors.find((a) => a.name === name && a.imageUrl))
         .filter(Boolean).map((a) => ({ src: a.imageUrl, alt: a.name }))
@@ -78,6 +80,16 @@ ${themeCSS}
     padding: 16px 0; border-top: 2px solid #171717; }
   .section-label h2 { margin: 0; font-size: 16px; font-weight: 750; }
   .section-label span { color: var(--muted-foreground); font-size: 12px; letter-spacing: .08em; }
+  .casting-feature { display: flex; justify-content: space-between; gap: 28px; align-items: stretch;
+    margin-bottom: 36px; color: #fff; background: #242724; text-decoration: none; overflow: hidden; }
+  .casting-feature-copy { padding: 26px 30px; display: flex; flex-direction: column; justify-content: center; }
+  .casting-feature-copy small { font-size: 11px; letter-spacing: .1em; font-weight: 700; color: #d3d6cf; }
+  .casting-feature-copy h2 { font-size: clamp(23px, 2.8vw, 32px); margin: 10px 0 7px; letter-spacing: -.04em; line-height: 1.3; }
+  .casting-feature-copy p { font-size: 13px; color: #dededb; margin: 0; }
+  .casting-feature-copy strong { font-size: 13px; margin-top: 20px; text-decoration: underline; text-underline-offset: 5px; }
+  .casting-feature-images { display: grid; grid-template-columns: repeat(3, 1fr); width: 40%; max-width: 420px; gap: 4px; }
+  .casting-feature-images img { width: 100%; height: 100%; min-height: 220px; max-height: 250px; object-fit: cover; object-position: center 20%; filter: grayscale(1); }
+  .casting-feature:hover img { filter: none; }
   .games { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
   .game-card { min-width: 0; display: flex; flex-direction: column; }
   .cover { min-width: 0; display: flex; flex-direction: column; aspect-ratio: 4/5;
@@ -128,6 +140,10 @@ ${themeCSS}
     .home-main { padding: 0 20px 44px; }
     .intro { padding: 30px 0 26px; align-items: flex-start; flex-direction: column; gap: 12px; }
     .intro-note br { display: none; }
+    .casting-feature { flex-direction: column; gap: 0; margin-bottom: 28px; }
+    .casting-feature-copy { padding: 22px; }
+    .casting-feature-images { width: 100%; max-width: none; height: 150px; }
+    .casting-feature-images img { min-height: 0; height: 150px; }
     .games { grid-template-columns: minmax(0, 1fr); gap: 32px; }
     .cover { aspect-ratio: 5/4; }
     .cover-title { font-size: 34px; }
@@ -144,12 +160,17 @@ ${siteHeaderHTML}
 <nav class="home-nav" aria-label="주 메뉴"><div class="home-nav-inner">
   <a href="/" aria-current="page">전체 게임</a>
   ${shipped.map((g) => `<a href="/${g.slug}${g.entries?.[0]?.query ?? ""}">${esc(g.name)}</a>`).join("")}
+  <a href="/casting">가상 캐스팅</a>
 </div></nav>
 <main class="home-main" id="main" tabindex="-1">
   <section class="intro">
     <div><p class="eyebrow">FOR THE LOVE OF CINEMA</p><h1>영화 좀 본 당신에게.</h1></div>
     <p class="intro-note">얼굴을 기억하고, 작품을 연결하고, 평점을 맞히세요.<br>로그인 없이, 지금 바로 한 판.</p>
   </section>
+  <a class="casting-feature" href="/casting">
+    <div class="casting-feature-copy"><small>NEW · THE CASTING ROOM</small><h2>어벤져스, 한국에서 만든다면?</h2><p>아이언맨부터 로키까지. 한국 배우로 완성하는 나만의 캐스팅.</p><strong>캐스팅 시작하기 →</strong></div>
+    <div class="casting-feature-images" aria-hidden="true">${images.casting.map((img) => `<img src="${esc(img.src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">`).join("")}</div>
+  </a>
   <div class="section-label"><h2>플레이할 게임</h2><span>${String(shipped.length).padStart(2, "0")} GAMES</span></div>
   <section class="games" aria-label="게임 선택">
 ${cards}

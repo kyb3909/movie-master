@@ -17,6 +17,7 @@
 import { readFile, writeFile, mkdir, copyFile, access } from "node:fs/promises"
 
 import { buildLanding } from "./build-landing.mjs"
+import { buildCastingPage } from "./build-casting-play.mjs"
 
 const OUT = "deploy/noorung-quiz"
 
@@ -104,6 +105,7 @@ const GAMES = [
 ]
 
 await mkdir(OUT, { recursive: true })
+await writeFile(`${OUT}/casting.html`, await buildCastingPage(), "utf8")
 
 const shipped = []
 for (const g of GAMES) {
@@ -182,6 +184,7 @@ await writeFile(
 
 console.log(`\n정적 배포 폴더 생성`)
 console.log(`  ${OUT}/index.html      랜딩`)
+console.log(`  ${OUT}/casting.html    가상 캐스팅`)
 for (const g of shipped) {
   console.log(`  ${OUT}/${g.slug}.html`.padEnd(38) + `${g.name}${g.count != null ? ` (${g.count.toLocaleString()}편)` : ""}`)
 }
