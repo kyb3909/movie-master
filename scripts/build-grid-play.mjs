@@ -288,6 +288,7 @@ let cur = null, filled = [], used = new Set(), left = 0, active = -1, over = fal
 
 function pickPuzzle() {
   titleSuggestions.clear();
+  RANK.setMode(mode);
   cur = PUZZLES[Math.floor(Math.random() * PUZZLES.length)];
   filled = new Array(9).fill(null);
   used = new Set();

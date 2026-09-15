@@ -15,11 +15,15 @@
  * 목록은 상위 100건만 남긴다. 순위표는 10등까지만 보여주고, 나머지는 커지기만 한다.
  */
 
-import { head, put } from "@vercel/blob"
+import { head, put, BlobNotFoundError } from "@vercel/blob"
 
 /** 랭킹을 나누는 축. 여기 없는 값은 받지 않는다 — 오타로 유령 순위표가 생기는 걸 막는다. */
-const GAMES = ["quiz", "hollywood", "highlow"]
-const MODES = ["", "fresh50", "hard"]
+const MODES_BY_GAME = {
+  quiz: ["", "hard"],
+  hollywood: ["", "hard"],
+  grid: ["easy", "hard"],
+  highlow: ["", "all", "fresh50"],
+}
 
 const NICK_MAX = 12
 const SCORE_MAX = 1000
@@ -33,12 +37,14 @@ async function load(game, mode) {
   try {
     const meta = await head(pathOf(game, mode))
     const res = await fetch(meta.url, { cache: "no-store" })
-    if (!res.ok) return []
+    if (!res.ok) throw new Error(`Ranking read failed: HTTP ${res.status}`)
     const rows = await res.json()
-    return Array.isArray(rows) ? rows : []
-  } catch {
-    // head 는 파일이 없으면 던진다. '아직 없음' 과 '읽기 실패' 를 여기서는 같게 다룬다.
-    return []
+    if (!Array.isArray(rows)) throw new Error("Invalid ranking data")
+    return rows
+  } catch (error) {
+    // 실제로 없는 순위표만 새로 만든다. 읽기 장애 때 기존 기록을 덮어쓰지 않는다.
+    if (error instanceof BlobNotFoundError) return []
+    throw error
   }
 }
 
@@ -48,7 +54,7 @@ async function save(game, mode, rows) {
     contentType: "application/json",
     addRandomSuffix: false,
     allowOverwrite: true,
-    cacheControlMaxAge: 0,
+    cacheControlMaxAge: 60,
   })
 }
 
@@ -57,22 +63,34 @@ const ranked = (rows) =>
   rows.slice().sort((a, b) => b.score - a.score || String(a.at).localeCompare(String(b.at)))
 
 export default async function handler(req, res) {
-  const url = new URL(req.url, "http://x")
-  const game = String(url.searchParams.get("game") ?? req.body?.game ?? "")
-  const mode = String(url.searchParams.get("mode") ?? req.body?.mode ?? "")
+  res.setHeader("Cache-Control", "no-store")
+  if (req.method !== "GET" && req.method !== "POST") {
+    res.setHeader("Allow", "GET, POST")
+    return res.status(405).json({ error: "method not allowed" })
+  }
 
-  if (!GAMES.includes(game) || !MODES.includes(mode)) {
+  let body = {}
+  if (req.method === "POST") {
+    try { body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body ?? {} }
+    catch { return res.status(400).json({ error: "invalid JSON" }) }
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return res.status(400).json({ error: "invalid body" })
+    }
+  }
+  const url = new URL(req.url, "http://x")
+  const game = String(url.searchParams.get("game") ?? body.game ?? "")
+  const mode = String(url.searchParams.get("mode") ?? body.mode ?? (game === "grid" ? "easy" : ""))
+
+  if (!Object.hasOwn(MODES_BY_GAME, game) || !MODES_BY_GAME[game].includes(mode)) {
     return res.status(400).json({ error: "unknown game or mode" })
   }
 
-  if (req.method === "GET") {
-    const rows = ranked(await load(game, mode)).slice(0, TOP)
-    res.setHeader("Cache-Control", "no-store")
-    return res.status(200).json({ rows: rows.map(({ id, nickname, score }) => ({ id, nickname, score })) })
-  }
+  try {
+    if (req.method === "GET") {
+      const rows = ranked(await load(game, mode)).slice(0, TOP)
+      return res.status(200).json({ rows: rows.map(({ id, nickname, score }) => ({ id, nickname, score })) })
+    }
 
-  if (req.method === "POST") {
-    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body ?? {}
     const nickname = String(body.nickname ?? "").trim().slice(0, NICK_MAX)
     const score = Math.round(Number(body.score))
 
@@ -87,13 +105,12 @@ export default async function handler(req, res) {
     await save(game, mode, ranked(rows).slice(0, KEEP))
 
     const top = ranked(rows).slice(0, TOP)
-    res.setHeader("Cache-Control", "no-store")
     return res.status(200).json({
       id: entry.id,
       rows: top.map(({ id, nickname, score }) => ({ id, nickname, score })),
     })
+  } catch (error) {
+    console.error("Ranking storage failure", { game, mode, method: req.method, message: error.message })
+    return res.status(503).json({ error: "ranking unavailable", message: "랭킹을 저장하거나 불러오지 못했습니다. 잠시 후 다시 시도해 주세요." })
   }
-
-  res.setHeader("Allow", "GET, POST")
-  return res.status(405).json({ error: "method not allowed" })
 }
