@@ -71,7 +71,7 @@ export function mountTitleSuggestions(input, list, titles) {
   }
   function update() {
     clear()
-    matches = findMovieTitles(titles, input.value)
+    matches = findMovieTitles(titles, input.value, 6)
     if (!matches.length) return
     matches.forEach((title, index) => {
       const option = document.createElement("li")
@@ -119,13 +119,26 @@ export function mountTitleSuggestions(input, list, titles) {
 }
 
 export const titleSuggestionsCSS = `
-  .title-suggestions { list-style: none; padding: 4px 0; margin: 8px 0 0;
-    border: 1px solid #bcbcbc; background: var(--card); }
+  .answer-field { flex: 1; min-width: 0; }
+  .form .answer-field input { display: block; width: 100%; }
+  .answer-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+  .form:has(.answer-field) { align-items: flex-start; }
+  .title-suggestions { display: flex; flex-wrap: wrap; align-items: flex-start;
+    list-style: none; gap: 8px; padding: 0; margin: 12px 0 0; }
   .title-suggestions[hidden] { display: none; }
-  .title-suggestions [role="option"] { min-height: 44px; display: flex; align-items: center;
-    padding: 10px 15px; font-size: 15px; line-height: 1.5; cursor: pointer; }
-  .title-suggestions [role="option"] + [role="option"] { border-top: 1px solid #eee; }
-  .title-suggestions [role="option"]:hover, .title-suggestions [aria-selected="true"] { background: #ededed; }
+  .title-suggestions [role="option"] { display: inline-flex; align-items: center;
+    min-height: 44px; max-width: 100%; padding: 9px 14px; border: 1px solid #d4d4d4;
+    border-radius: 6px; background: #f5f5f5; color: var(--foreground);
+    font-size: 14px; font-weight: 600; line-height: 1.5; cursor: pointer;
+    word-break: keep-all; overflow-wrap: anywhere; transition: background .15s, border-color .15s; }
+  .title-suggestions [role="option"]:hover { border-color: #171717; background: #eaeaea; }
+  .title-suggestions [aria-selected="true"] { border-color: #171717; background: #171717; color: #fff; }
+  @media (max-width: 600px) {
+    .answer-field { flex-basis: 100%; }
+    .answer-actions { width: 100%; }
+    .title-suggestions { gap: 7px; margin-top: 10px; margin-bottom: 6px; }
+    .title-suggestions [role="option"] { padding-inline: 12px; }
+  }
 `
 
 export const titleSuggestionsScript = (titles) => `

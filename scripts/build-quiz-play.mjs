@@ -320,12 +320,16 @@ ${siteHeaderHTML}
   <div class="hints" id="hints"></div>
 
   <form class="form" id="f">
-    <input type="text" id="guess" aria-label="영화 제목" placeholder="영화 제목을 입력하세요"
-           autocomplete="off" autocapitalize="off" spellcheck="false">
-    <button type="submit" class="btn">확인</button>
-    <button type="button" class="btn btn-ghost" id="skip">포기</button>
+    <div class="answer-field">
+      <input type="text" id="guess" aria-label="영화 제목" placeholder="영화 제목을 입력하세요"
+             autocomplete="off" autocapitalize="off" spellcheck="false">
+      <ul class="title-suggestions" id="sugg" hidden></ul>
+    </div>
+    <div class="answer-actions">
+      <button type="submit" class="btn">확인</button>
+      <button type="button" class="btn btn-ghost" id="skip">포기</button>
+    </div>
   </form>
-  <ul class="title-suggestions" id="sugg" hidden></ul>
   <p class="msg" id="msg" role="status" aria-live="polite"></p>
 
   <section class="result hidden" id="result">

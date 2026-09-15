@@ -232,12 +232,16 @@ ${siteHeaderHTML}
     <p class="askedFor" id="askedFor"></p>
     <form class="form" id="f" autocomplete="off">
       <label for="guess" class="sr" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">영화 제목</label>
-      <input id="guess" type="text" placeholder="영화 제목" enterkeyhint="done"
-             autocomplete="off" autocapitalize="off" spellcheck="false">
-      <button class="btn" type="submit">확인</button>
-      <button class="btn ghost" type="button" id="cancel">취소</button>
+      <div class="answer-field">
+        <input id="guess" type="text" placeholder="영화 제목" enterkeyhint="done"
+               autocomplete="off" autocapitalize="off" spellcheck="false">
+        <ul class="title-suggestions" id="sugg" hidden></ul>
+      </div>
+      <div class="answer-actions">
+        <button class="btn" type="submit">확인</button>
+        <button class="btn ghost" type="button" id="cancel">취소</button>
+      </div>
     </form>
-    <ul class="title-suggestions" id="sugg" hidden></ul>
   </div>
 
   <p class="msg" id="msg" role="status" aria-live="polite"></p>
