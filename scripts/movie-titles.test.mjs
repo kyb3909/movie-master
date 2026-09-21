@@ -103,3 +103,21 @@ test("available catalog includes non-quiz Korean movies and international titles
   assert.ok(findMovieTitles(all, "inception").includes("Inception"))
   console.log(`자동완성 ${all.length}개 제목 · 기존 퀴즈 밖 ${outsideQuiz.length}개`)
 })
+
+test("focusing a form button preserves suggestions until submission, so mobile clicks land", () => {
+  const input = new Element("guess"), list = new Element("sugg"), submit = new Element("submit")
+  input.form = new Element("form")
+  input.form.append(submit)
+  const context = { document: { createElement: () => new Element() }, input, list, normalizeMovieTitle, findMovieTitles }
+  new Script(`(${mountTitleSuggestions.toString()})(input, list, ['Inception'])`).runInNewContext(context)
+  input.value = 'Inception'
+  input.dispatch('input')
+  input.dispatch('blur', { relatedTarget: submit })
+  input.form.dispatch('focusout', { relatedTarget: submit })
+  assert.equal(list.hidden, false)
+  input.form.dispatch('submit')
+  assert.equal(list.hidden, true)
+  input.dispatch('input')
+  input.form.dispatch('focusout', { relatedTarget: new Element('outside') })
+  assert.equal(list.hidden, true)
+})

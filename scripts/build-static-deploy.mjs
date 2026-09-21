@@ -50,13 +50,13 @@ const GAMES = [
     src: "data/grid-play.html",
     name: "배우 격자",
     desc: "가로·세로의 두 배우가 함께 나온 영화로 아홉 칸을 채웁니다. 같은 영화는 한 번만 쓸 수 있습니다.",
-    tag: "한국 영화",
+    tag: "한국 영화 · 헐리우드",
     // 이쪽은 영화가 아니라 격자 문제의 수다. "편" 으로 찍으면 말이 어긋난다.
     unit: "문제",
-    countFrom: async () => (JSON.parse(await readFile("data/grid-puzzles.json", "utf8"))).count,
+    countFrom: async () => (await Promise.all(['data/grid-puzzles.json', 'data/hollywood-grid-puzzles.json'].map(async (path) => JSON.parse(await readFile(path, 'utf8')).count))).reduce((a, b) => a + b, 0),
     entries: [
-      { label: "쉬움 · 12번", query: "?mode=easy" },
-      { label: "어려움 · 9번", query: "?mode=hard" },
+      { label: "한국 영화", query: "?region=korea&mode=easy" },
+      { label: "헐리우드", query: "?region=hollywood&mode=easy" },
     ],
   },
   {
@@ -186,7 +186,7 @@ console.log(`\n정적 배포 폴더 생성`)
 console.log(`  ${OUT}/index.html      랜딩`)
 console.log(`  ${OUT}/casting.html    가상 캐스팅`)
 for (const g of shipped) {
-  console.log(`  ${OUT}/${g.slug}.html`.padEnd(38) + `${g.name}${g.count != null ? ` (${g.count.toLocaleString()}편)` : ""}`)
+  console.log(`  ${OUT}/${g.slug}.html`.padEnd(38) + `${g.name}${g.count != null ? ` (${g.count.toLocaleString()}${g.unit ?? '편'})` : ""}`)
 }
 for (const g of GAMES) {
   if (!shipped.some((s) => s.slug === g.slug)) console.log(`  (건너뜀) ${g.src} 없음 — ${g.name}`)

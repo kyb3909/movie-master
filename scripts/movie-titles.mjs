@@ -112,7 +112,15 @@ export function mountTitleSuggestions(input, list, titles) {
     const option = event.target.closest("[data-title-index]")
     if (option && list.contains(option)) choose(Number(option.dataset.titleIndex))
   })
-  input.addEventListener("blur", clear)
+  // On mobile, hiding suggestions during pointerdown moves the submit button
+  // before pointerup, swallowing the click. Keep them until the form action runs.
+  input.addEventListener("blur", (event) => {
+    if (event.relatedTarget && input.form?.contains(event.relatedTarget)) return
+    clear()
+  })
+  input.form?.addEventListener("focusout", (event) => {
+    if (!event.relatedTarget || !input.form.contains(event.relatedTarget)) clear()
+  })
   input.form?.addEventListener("submit", clear)
   clear()
   return { clear }

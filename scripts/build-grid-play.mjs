@@ -25,41 +25,40 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises"
 import { dirname } from "node:path"
+import { createHash } from "node:crypto"
 import { navCSS, navHTML, navScript } from "./play-nav.mjs"
 import { rankCSS, rankHTML, rankScript } from "./play-rank.mjs"
 import { themeCSS, gameThemeCSS, siteHeaderHTML } from "./play-theme.mjs"
-import { loadMovieTitles, titleSuggestionsCSS, titleSuggestionsScript } from "./movie-titles.mjs"
+import { loadMovieTitles, normalizeMovieTitle, titleSuggestionsCSS, titleSuggestionsScript } from "./movie-titles.mjs"
+import { pickNextGrid } from "./grid-engine.mjs"
 
-const IN_PATH = "data/grid-puzzles.json"
-const TITLES_PATH = "data/quizzes.json"
 const OUT_PATH = "data/grid-play.html"
-
-const data = JSON.parse(await readFile(IN_PATH, "utf8"))
-
-/**
- * 배우 사진 주소는 100자가 넘는데 같은 배우가 여러 문제에 거듭 나온다.
- * 그대로 실으면 같은 주소를 수백 번 적게 된다. 배우 목록을 따로 두고 번호로 가리킨다.
- */
-const people = []
-const idxOf = new Map()
-const ref = (p) => {
-  const key = p.name + "|" + p.img
-  if (!idxOf.has(key)) {
-    idxOf.set(key, people.length)
-    people.push([p.name, p.img])
+const packs = {}
+for (const [region, path] of Object.entries({ korea: 'data/grid-puzzles.json', hollywood: 'data/hollywood-grid-puzzles.json' })) {
+  const data = JSON.parse(await readFile(path, 'utf8'))
+  if (!data.puzzles?.length) throw new Error('Empty grid catalog: ' + path)
+  const people = [], idxOf = new Map()
+  const ref = (p) => {
+    const key = p.id || p.name
+    if (!idxOf.has(key)) { idxOf.set(key, people.length); people.push([p.name, p.img]) }
+    return idxOf.get(key)
   }
-  return idxOf.get(key)
+  const puzzles = data.puzzles.map((p) => ({
+    id: createHash('sha256').update(p.id).digest('hex').slice(0, 16),
+    r: p.rows.map(ref), c: p.cols.map(ref), a: p.cells,
+    ...(region === 'hollywood' ? { f: [...new Set(p.cells.flat().map(normalizeMovieTitle))] } : {}),
+  }))
+  packs[region] = {
+    label: region === 'korea' ? '한국 영화' : '헐리우드',
+    people, puzzles, aliases: data.aliases ?? {},
+    version: createHash('sha256').update(JSON.stringify({ people, puzzles })).digest('hex').slice(0, 12),
+    note: region === 'korea'
+      ? '관객 100만 명 이상인 한국 영화에서 출제합니다.'
+      : '국내 개봉작과 해외 흥행작에서 다양한 배우와 작품을 연결합니다. 한국어 제목과 영어 원제 모두 정답으로 인정합니다.',
+  }
 }
-
-const puzzles = data.puzzles.map((z) => ({
-  r: z.rows.map(ref),
-  c: z.cols.map(ref),
-  a: z.cells,
-}))
-
 /** 자동완성은 출제 조건과 별개인 전체 영화 목록을 사용한다. */
-const quizTitles = JSON.parse(await readFile(TITLES_PATH, "utf8")).quizzes.map((q) => q.title)
-const titles = await loadMovieTitles([...quizTitles, ...data.puzzles.flatMap((p) => p.cells.flat())])
+const titles = await loadMovieTitles(Object.values(packs).flatMap((p) => p.puzzles.flatMap((z) => z.a.flat())))
 
 const html = `<!doctype html>
 <html lang="ko">
@@ -105,7 +104,7 @@ ${navCSS}
     width: 100%; max-width: 62px; aspect-ratio: 3/4; object-fit: cover;
     border-radius: 6px; background: var(--muted); display: block; margin: 0 auto 4px;
   }
-  .who b { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.3; word-break: keep-all; }
+  .who b { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.3; word-break: keep-all; overflow-wrap: anywhere; }
 
   .cell {
     width: 100%; min-height: 74px; padding: 8px 6px;
@@ -204,10 +203,14 @@ ${siteHeaderHTML}
     <h1 class="brand">배우 격자</h1>
     <span class="score" id="score"></span>
   </div>
+  <div class="modes regions" role="group" aria-label="영화 선택">
+    <span>영화</span>
+    <button type="button" data-region="korea">한국 영화</button>
+    <button type="button" data-region="hollywood">헐리우드</button>
+    <span class="cnt" id="poolCount"></span>
+  </div>
 
-
-
-  <p class="rule">가로와 세로의 <b>두 배우가 함께 나온 영화</b>를 칸마다 적어 아홉 칸을 채웁니다.
+  <p class="rule"><b>위쪽 배우와 왼쪽 배우가 만나는 칸</b>에 두 배우가 함께 나온 영화를 적어 아홉 칸을 채웁니다.
   같은 영화는 한 번만 쓸 수 있고, <b id="ruleTries">시도는 아홉 번</b>입니다.</p>
 
   <div class="modes">
@@ -258,13 +261,13 @@ ${siteHeaderHTML}
 
 ${rankHTML("랭킹")}
 
-  <p class="foot">문제는 관객 100만 명 이상인 한국 영화 중에서 냅니다. 배우가 함께 나온 작품이 여럿이면 어느 것을 적어도 정답입니다.</p>
+  <p class="foot"><span id="catalogNote"></span> 배우가 함께 나온 작품이 여럿이면 어느 것을 적어도 정답입니다.</p>
 </main>
 
 <script>
 ${titleSuggestionsScript(titles)}
-const PEOPLE = ${JSON.stringify(people)};
-const PUZZLES = ${JSON.stringify(puzzles)};
+const PACKS = ${JSON.stringify(packs).replace(/</g, '\\u003c')};
+const pickNextGrid = ${pickNextGrid.toString()};
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -274,13 +277,34 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({'&':'&
  * 공백·문장부호에 더해 한자도 지운다. 그대로 두면 '해무(海霧)' 를 '해무' 라고
  * 적은 사람이 틀린 것이 된다.
  */
-const norm = (s) => String(s).toLowerCase()
-  .replace(/[\\s:;·,.\\-–—!?'"()\\/#+\\u3400-\\u9FFF]/g, '');
+const norm = ${normalizeMovieTitle.toString()};
 
 /** 난이도 = 시도 횟수. */
 const TRIES = { easy: 12, hard: 9 };
 const MODE_KEY = 'noorung.grid.mode';
 const REC_KEY = 'noorung-quiz-record:grid';
+const REGION_KEY = 'noorung.grid.region';
+let region = 'korea';
+try { region = localStorage.getItem(REGION_KEY) || 'korea'; } catch (e) {}
+const qRegion = new URLSearchParams(location.search).get('region');
+if (qRegion !== null) region = qRegion;
+if (!Object.hasOwn(PACKS, region)) region = 'korea';
+let PEOPLE = [], PUZZLES = [], ALIASES = {};
+const histories = {};
+const rankMode = () => region === 'korea' ? mode : 'hollywood-' + mode;
+
+function historyForRegion() {
+  if (histories[region]) return histories[region];
+  let history = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem('noorung.grid.history.v2:' + region) || 'null');
+    if (saved && saved.version === PACKS[region].version && Array.isArray(saved.history)) {
+      history = saved.history.filter((h) => h && typeof h.id === 'string' && Array.isArray(h.actors) && h.actors.length === 6 && h.actors.every((id) => Number.isInteger(id) && id >= 0 && id < PEOPLE.length)).slice(-100)
+        .map((h) => ({ ...h, movies: Array.isArray(h.movies) ? h.movies.filter((f) => typeof f === 'string').slice(0, 150) : [] }));
+    }
+  } catch (e) {}
+  return histories[region] = history;
+}
 
 let mode = 'easy';
 try { mode = localStorage.getItem(MODE_KEY) || 'easy'; } catch (e) {}
@@ -292,8 +316,32 @@ let cur = null, filled = [], used = new Set(), left = 0, active = -1, over = fal
 
 function pickPuzzle() {
   titleSuggestions.clear();
-  RANK.setMode(mode);
-  cur = PUZZLES[Math.floor(Math.random() * PUZZLES.length)];
+  const pack = PACKS[region];
+  PEOPLE = pack.people; PUZZLES = pack.puzzles; ALIASES = pack.aliases;
+  RANK.setMode(rankMode());
+  const history = historyForRegion();
+  cur = pickNextGrid(PUZZLES, history);
+  history.push({ id: cur.id, actors: [...cur.r, ...cur.c], movies: cur.f ?? [] });
+  histories[region] = history.slice(-100);
+  try {
+    localStorage.setItem('noorung.grid.history.v2:' + region, JSON.stringify({ version: pack.version, history: histories[region] }));
+  } catch (e) {}
+  document.querySelectorAll('[data-region]').forEach((b) => {
+    const on = b.dataset.region === region;
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+  });
+  document.querySelectorAll('[data-mode]').forEach((b) => {
+    const on = b.dataset.mode === mode;
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+  });
+  $('poolCount').textContent = PEOPLE.length + '명의 배우 · ' + PUZZLES.length + '문제';
+  $('catalogNote').textContent = pack.note;
+  document.title = '배우 격자 · ' + pack.label;
+  try {
+    const url = new URL(location.href);
+    url.searchParams.set('region', region); url.searchParams.set('mode', mode);
+    window.history.replaceState(null, '', url);
+  } catch (e) {}
   filled = new Array(9).fill(null);
   used = new Set();
   left = TRIES[mode];
@@ -321,6 +369,7 @@ function paintCell(i) {
   const td = $('t' + i);
   const v = filled[i];
   td.innerHTML = '<button class="cell' + (v ? ' done' : '') + '" type="button" data-i="' + i + '"' +
+    ' aria-label="' + esc(PEOPLE[cur.r[Math.floor(i / 3)]][0] + ' × ' + PEOPLE[cur.c[i % 3]][0] + (v ? ': ' + v : ': 영화 맞히기')) + '"' +
     (v || over ? ' disabled' : '') + '>' +
     (v ? esc(v) : '<span class="ph">+</span>') + '</button>';
 }
@@ -353,7 +402,7 @@ function submit(text) {
   if (!g) return;
 
   const answers = cur.a[active];
-  const hit = answers.find((t) => norm(t) === g);
+  const hit = answers.find((t) => [t, ...(ALIASES[t] || [])].some((alias) => norm(alias) === g));
 
   if (hit && used.has(norm(hit))) {
     say('이미 쓴 영화입니다. 다른 작품을 적어 주세요.', 'no');
@@ -409,12 +458,12 @@ function finish() {
   say('');
 
   try {
-    const all = JSON.parse(localStorage.getItem(REC_KEY + ':' + mode) || '[]');
+    const all = JSON.parse(localStorage.getItem(REC_KEY + ':' + rankMode()) || '[]');
     all.unshift({ s: n, d: Date.now() });
-    localStorage.setItem(REC_KEY + ':' + mode, JSON.stringify(all.slice(0, 20)));
+    localStorage.setItem(REC_KEY + ':' + rankMode(), JSON.stringify(all.slice(0, 20)));
   } catch (e) {}
 
-  RANK.offer(n, mode);
+  RANK.offer(n, rankMode());
 }
 
 // ── 이벤트 ────────────────────────────────────────────────
@@ -432,7 +481,7 @@ $('cancel').onclick = () => {
 $('again').onclick = pickPuzzle;
 $('share').onclick = () => {
   const marks = filled.map((v) => v ? '🟩' : '⬜');
-  const txt = '누룽지 극장 · 배우 격자 ' + filled.filter(Boolean).length + '/9\\n' +
+  const txt = '누룽지 극장 · 배우 격자 · ' + PACKS[region].label + ' · ' + (mode === 'hard' ? '어려움' : '쉬움') + ' ' + filled.filter(Boolean).length + '/9\\n' +
     marks.slice(0, 3).join('') + '\\n' + marks.slice(3, 6).join('') + '\\n' + marks.slice(6).join('');
   navigator.clipboard.writeText(txt).then(
     () => say('결과를 복사했습니다.', 'ok'),
@@ -440,7 +489,18 @@ $('share').onclick = () => {
   );
 };
 
-document.querySelectorAll('.modes button').forEach((b) => {
+document.querySelectorAll('[data-region]').forEach((b) => {
+  b.onclick = () => {
+    if (b.dataset.region === region) return;
+    const started = !over && (filled.some(Boolean) || left < TRIES[mode]);
+    if (started && !confirm('영화를 바꾸면 지금 판이 사라집니다. 계속할까요?')) return;
+    region = b.dataset.region;
+    try { localStorage.setItem(REGION_KEY, region); } catch (e) {}
+    pickPuzzle();
+  };
+});
+
+document.querySelectorAll('[data-mode]').forEach((b) => {
   b.classList.toggle('on', b.dataset.mode === mode);
   b.onclick = () => {
     if (b.dataset.mode === mode) return;
@@ -449,7 +509,6 @@ document.querySelectorAll('.modes button').forEach((b) => {
     if (started && !confirm('난이도를 바꾸면 지금 판이 사라집니다. 계속할까요?')) return;
     mode = b.dataset.mode;
     try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
-    document.querySelectorAll('.modes button').forEach((x) => x.classList.toggle('on', x.dataset.mode === mode));
     pickPuzzle();
   };
 });
@@ -467,6 +526,6 @@ await mkdir(dirname(OUT_PATH), { recursive: true })
 await writeFile(OUT_PATH, html, "utf8")
 
 console.log(`\n배우 격자 플레이 페이지`)
-console.log(`  문제 ${puzzles.length}개 · 축에 쓰인 배우 ${people.length}명 · 자동완성 제목 ${new Set(titles).size}개`)
+for (const pack of Object.values(packs)) console.log(`  ${pack.label}: 문제 ${pack.puzzles.length}개 · 배우 ${pack.people.length}명`)
 console.log(`  크기 ${(html.length / 1024).toFixed(0)}KB`)
 console.log(`  저장: ${OUT_PATH}\n`)

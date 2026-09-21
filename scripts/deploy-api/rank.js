@@ -21,7 +21,7 @@ import { head, put, BlobNotFoundError } from "@vercel/blob"
 const MODES_BY_GAME = {
   quiz: ["", "hard"],
   hollywood: ["", "hard"],
-  grid: ["easy", "hard"],
+  grid: ["easy", "hard", "hollywood-easy", "hollywood-hard"],
   highlow: ["", "all", "fresh50"],
 }
 

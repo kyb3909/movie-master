@@ -77,8 +77,9 @@ var RANK = (function () {
   var LOCAL_KEY = ${JSON.stringify(localKey ?? "")};
   var NICK_KEY = 'noorung.nick';
 
-  // 로컬 검수본(data/*-play.html)에는 API 가 없다.
-  var online = !/-play\\.html$/.test(location.pathname) && location.protocol !== 'file:';
+  // 로컬 검수 서버는 clean URL 배포 폴더를 열어도 API 가 없다.
+  var online = !/-play\\.html$/.test(location.pathname) && location.protocol !== 'file:'
+    && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 
   var mode = '';     // 난이도로 순위표를 더 나눌 때 쓴다
   var mine = null;   // 방금 올린 기록. 목록에서 표시해 준다.

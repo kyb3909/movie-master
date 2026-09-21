@@ -47,7 +47,7 @@ async function api({ readError, writeError, invalidData } = {}) {
 
 test("every current game/mode can register and retrieve a score", async () => {
   const { request, records } = await api()
-  const combinations = { quiz: ["", "hard"], hollywood: ["", "hard"], grid: ["easy", "hard"], highlow: ["", "all", "fresh50"] }
+  const combinations = { quiz: ["", "hard"], hollywood: ["", "hard"], grid: ["easy", "hard", "hollywood-easy", "hollywood-hard"], highlow: ["", "all", "fresh50"] }
   for (const [game, modes] of Object.entries(combinations)) {
     for (const mode of modes) {
       const path = `/api/rank?game=${game}&mode=${mode}`
@@ -61,7 +61,7 @@ test("every current game/mode can register and retrieve a score", async () => {
       assert.equal(read.headers["Cache-Control"], "no-store")
     }
   }
-  assert.equal(records.size, 9)
+  assert.equal(records.size, 11)
 })
 
 test("string JSON bodies are parsed before game and mode validation", async () => {

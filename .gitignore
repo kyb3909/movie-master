@@ -66,6 +66,8 @@ data/*
 
 # Playwright MCP 가 남기는 스냅샷·스크린샷
 .playwright-mcp/
+.playwright-cli/
+output/playwright/
 
 # IMDb 공개 데이터셋 (1GB 넘는 원본. 필요하면 다시 받는다)
 data/imdb/
